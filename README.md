@@ -60,7 +60,7 @@ Requirements: Linux x86-64; an NVIDIA GPU with a recent driver for training
 smoke runs also work on the CPU, only slower.
 
 ```sh
-git clone git@github.com:BrikHMP18/leap-walking.git && cd leap-walking
+git clone git@github.com:BrikHMP18/walking-leap.git && cd walking-leap
 uv sync
 uv run list-envs        # Leap-Walking-Flat-v0 must be listed
 ```

@@ -12,7 +12,7 @@ training beyond PPO smoke tests and no hardware work until phase 5 is approved.
 ## Milestone A — Foundation (current)
 
 ### Phase 1 — Project infrastructure
-- [x] Repository initialization (GitHub: `BrikHMP18/leap-walking`, branch `main`)
+- [x] Repository initialization (GitHub: `BrikHMP18/walking-leap`, branch `main`)
 - [x] Dependency management
   - [x] `uv` project, Python pinned via `.python-version` (3.12)
   - [x] `mjlab==1.6.1` pinned exactly; full lock in `uv.lock`
