@@ -12,7 +12,7 @@ training beyond PPO smoke tests and no hardware work until phase 5 is approved.
 ## Milestone A — Foundation (current)
 
 ### Phase 1 — Project infrastructure
-- [x] Repository initialization (`git init`, local only; no remote push yet)
+- [x] Repository initialization (GitHub: `BrikHMP18/leap-walking`, branch `main`)
 - [x] Dependency management
   - [x] `uv` project, Python pinned via `.python-version` (3.12)
   - [x] `mjlab==1.6.1` pinned exactly; full lock in `uv.lock`
@@ -21,7 +21,7 @@ training beyond PPO smoke tests and no hardware work until phase 5 is approved.
   - [x] `mjlab.tasks` entry point in `pyproject.toml`
   - [x] `Leap-Walking-Flat-v0` registered (visible in `uv run list-envs`)
   - [x] mjlab's own `train` / `play` CLIs used unchanged
-- [ ] Documentation (see phase 4)
+- [x] Documentation (see phase 4)
 
 ### Phase 2 — Robot integration
 - [x] MJCF integration
@@ -78,7 +78,7 @@ training beyond PPO smoke tests and no hardware work until phase 5 is approved.
 - [x] AGENTS.md: conventions and validation rules for future agents
 - [x] PLAN.md (this file)
 - [x] Final technical self-review
-- [ ] Commit and push to the remote (needs the remote URL)
+- [x] Commit and push to the remote
 
 ---
 
