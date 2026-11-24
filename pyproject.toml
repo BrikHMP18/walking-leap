@@ -1,10 +1,10 @@
 [project]
-name = "leap-walking"
+name = "walking-leap"
 version = "0.1.0"
 description = "Emergent finger locomotion for the LEAP Hand V1 with mjlab."
 readme = "README.md"
 license = "MIT"
-license-files = ["LICENSE", "src/leap_walking/assets/leap_hand/LICENSE"]
+license-files = ["LICENSE", "src/walking_leap/assets/leap_hand/LICENSE"]
 requires-python = ">=3.10,<3.14"
 dependencies = [
   "mjlab==1.6.1",
@@ -16,7 +16,7 @@ build-backend = "uv_build"
 
 # mjlab discovers external tasks through this entry point on import.
 [project.entry-points."mjlab.tasks"]
-leap_walking = "leap_walking"
+walking_leap = "walking_leap"
 
 [dependency-groups]
 dev = [

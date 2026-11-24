@@ -11,8 +11,8 @@ import numpy as np
 import pytest
 from mjlab.entity import Entity
 
-from leap_walking import robot
-from leap_walking.env_cfg import leap_walking_flat_env_cfg
+from walking_leap import robot
+from walking_leap.env_cfg import walking_leap_flat_env_cfg
 
 # sha256 of Menagerie's leap_hand/right_hand.xml at robot.MENAGERIE_COMMIT.
 UPSTREAM_XML_SHA256 = "9d8f25c38bdb60617f378c07b7e71f97306471353c81bf281eb9943f3f2340d8"
@@ -27,7 +27,7 @@ def model() -> mujoco.MjModel:
     name="floor", type=mujoco.mjtGeom.mjGEOM_PLANE, size=(0, 0, 0.01)
   )
   m = spec.compile()
-  leap_walking_flat_env_cfg().sim.mujoco.apply(m)
+  walking_leap_flat_env_cfg().sim.mujoco.apply(m)
   return m
 
 

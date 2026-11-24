@@ -1,4 +1,4 @@
-# LEAP Walking
+# Walking LEAP
 
 Reinforcement learning for **finger walking with the LEAP Hand V1**: a 16-DOF
 anthropomorphic hand, turned palm-down, that should learn to walk on its
@@ -37,8 +37,8 @@ the same model, physics options and action mapping as the environment.
 ## Repository layout
 
 ```
-src/leap_walking/
-  __init__.py      Registers Leap-Walking-Flat-v0 (loaded via the mjlab.tasks entry point)
+src/walking_leap/
+  __init__.py      Registers Walking-Leap-Flat-v0 (loaded via the mjlab.tasks entry point)
   robot.py         MJCF loading, floating base, actuators, collisions, nominal pose
   env_cfg.py       Scene, sim, observations, actions, command, rewards, terminations, metrics
   agent_cfg.py     PPO runner / network configuration
@@ -62,7 +62,7 @@ smoke runs also work on the CPU, only slower.
 ```sh
 git clone git@github.com:BrikHMP18/walking-leap.git && cd walking-leap
 uv sync
-uv run list-envs        # Leap-Walking-Flat-v0 must be listed
+uv run list-envs        # Walking-Leap-Flat-v0 must be listed
 ```
 
 ## Usage
@@ -71,34 +71,34 @@ Visualize the environment without a policy (`--viewer native` opens a MuJoCo
 window; `--viewer viser` serves a web viewer at http://localhost:8080):
 
 ```sh
-uv run play Leap-Walking-Flat-v0 --agent zero    # hold the nominal pose
-uv run play Leap-Walking-Flat-v0 --agent random  # uniform random actions
+uv run play Walking-Leap-Flat-v0 --agent zero    # hold the nominal pose
+uv run play Walking-Leap-Flat-v0 --agent random  # uniform random actions
 ```
 
 Training smoke test (seconds; checks rollouts, PPO updates and checkpoints):
 
 ```sh
-uv run train Leap-Walking-Flat-v0 --env.scene.num-envs 512 --agent.max-iterations 10
+uv run train Walking-Leap-Flat-v0 --env.scene.num-envs 512 --agent.max-iterations 10
 ```
 
 Full training is **not** part of the foundation. When phase 5 starts, the entry
 point is the same CLI:
 
 ```sh
-uv run train Leap-Walking-Flat-v0 --env.scene.num-envs 4096
+uv run train Walking-Leap-Flat-v0 --env.scene.num-envs 4096
 ```
 
-Runs are written to `logs/rsl_rl/leap_walking_flat/<date_time>/` (TensorBoard
+Runs are written to `logs/rsl_rl/walking_leap_flat/<date_time>/` (TensorBoard
 logs, `params/env.yaml`, `params/agent.yaml`, `model_<iteration>.pt`). Add
 `--agent.logger wandb` to log to Weights & Biases instead. Play a checkpoint:
 
 ```sh
-uv run play Leap-Walking-Flat-v0 \
-  --checkpoint-file logs/rsl_rl/leap_walking_flat/<date_time>/model_<iteration>.pt
+uv run play Walking-Leap-Flat-v0 \
+  --checkpoint-file logs/rsl_rl/walking_leap_flat/<date_time>/model_<iteration>.pt
 ```
 
 Any config field can be overridden from the CLI (`--env.<field>`,
-`--agent.<field>`); see `uv run train Leap-Walking-Flat-v0 --help`.
+`--agent.<field>`); see `uv run train Walking-Leap-Flat-v0 --help`.
 
 ## Tests
 
@@ -254,4 +254,4 @@ per env), seed 42, TensorBoard logging.
 ## License
 
 MIT (see [LICENSE](LICENSE)). The LEAP Hand model keeps its own MIT license in
-`src/leap_walking/assets/leap_hand/LICENSE`.
+`src/walking_leap/assets/leap_hand/LICENSE`.

@@ -33,8 +33,8 @@ from mjlab.tasks.velocity import mdp as vel_mdp
 from mjlab.terrains import TerrainEntityCfg
 from mjlab.viewer import ViewerConfig
 
-from leap_walking import mdp
-from leap_walking.robot import (
+from walking_leap import mdp
+from walking_leap.robot import (
   EFFORT_LIMIT,
   FINGER_ROOT_BODIES,
   ROOT_BODY,
@@ -53,7 +53,7 @@ PALM_CONTACT = "palm_ground_contact"
 DIGIT_CONTACT = "digit_ground_contact"
 
 
-def leap_walking_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+def walking_leap_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   """Forward walking on flat ground. ``play=True`` gives an endless episode."""
 
   ##

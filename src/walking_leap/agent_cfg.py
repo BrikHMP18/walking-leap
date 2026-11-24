@@ -3,7 +3,7 @@
 from mjlab.rl import RslRlModelCfg, RslRlOnPolicyRunnerCfg, RslRlPpoAlgorithmCfg
 
 
-def leap_walking_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+def walking_leap_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
   return RslRlOnPolicyRunnerCfg(
     actor=RslRlModelCfg(
       hidden_dims=(256, 128, 64),
@@ -39,7 +39,7 @@ def leap_walking_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
     max_iterations=3_000,
     save_interval=100,
     seed=42,
-    experiment_name="leap_walking_flat",
+    experiment_name="walking_leap_flat",
     # Local logging by default; pass --agent.logger wandb to use Weights & Biases.
     logger="tensorboard",
   )

@@ -15,8 +15,8 @@ import mujoco
 import numpy as np
 from mjlab.entity import Entity
 
-from leap_walking import robot
-from leap_walking.env_cfg import ACTION_SCALE, leap_walking_flat_env_cfg
+from walking_leap import robot
+from walking_leap.env_cfg import ACTION_SCALE, walking_leap_flat_env_cfg
 
 OUT = Path(__file__).parent / "media"
 FPS = 15
@@ -54,7 +54,7 @@ def build_model() -> mujoco.MjModel:
   # Visual-only site to draw the palm (robot base) frame.
   spec.body(robot.ROOT_BODY).add_site(name="palm_frame", size=(0.001, 0, 0))
   m = spec.compile()
-  leap_walking_flat_env_cfg().sim.mujoco.apply(m)
+  walking_leap_flat_env_cfg().sim.mujoco.apply(m)
   # Palm frame axes ~6 cm long (lengths scale with stat.meansize).
   m.vis.scale.framelength = 0.06 / m.stat.meansize
   m.vis.scale.framewidth = 0.004 / m.stat.meansize

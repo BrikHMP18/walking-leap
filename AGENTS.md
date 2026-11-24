@@ -28,7 +28,7 @@ maintainer's explicit approval.
 - Configuration-driven: thresholds, weights and scales are config values, not
   constants buried in functions.
 - Register new variants with `register_mjlab_task` in `__init__.py`; task IDs
-  follow `Leap-Walking-<Terrain>-v<N>`.
+  follow `Walking-Leap-<Terrain>-v<N>`.
 - Style: ruff, 2-space indentation (mjlab's convention), type hints, short
   docstrings that state units and frames.
 
@@ -79,7 +79,7 @@ Before every commit:
 ```sh
 uv run ruff check src tests docs && uv run ruff format --check src tests docs
 uv run pytest
-uv run train Leap-Walking-Flat-v0 --env.scene.num-envs 512 --agent.max-iterations 10  # if env/agent changed
+uv run train Walking-Leap-Flat-v0 --env.scene.num-envs 512 --agent.max-iterations 10  # if env/agent changed
 ```
 
 - New physics or model changes need a test in `tests/test_robot.py` (plain

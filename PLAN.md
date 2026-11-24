@@ -1,4 +1,4 @@
-# PLAN — LEAP Walking
+# PLAN — Walking LEAP
 
 Roadmap and progress tracking. A box is checked only when the item is
 implemented **and** verified (test, measurement or smoke run named next to it).
@@ -19,7 +19,7 @@ training beyond PPO smoke tests and no hardware work until phase 5 is approved.
   - [x] Dev tools: `pytest`, `ruff`
 - [x] Native mjlab integration
   - [x] `mjlab.tasks` entry point in `pyproject.toml`
-  - [x] `Leap-Walking-Flat-v0` registered (visible in `uv run list-envs`)
+  - [x] `Walking-Leap-Flat-v0` registered (visible in `uv run list-envs`)
   - [x] mjlab's own `train` / `play` CLIs used unchanged
 - [x] Documentation (see phase 4)
 

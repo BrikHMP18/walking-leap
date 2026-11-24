@@ -8,9 +8,9 @@ import torch
 from mjlab.envs import ManagerBasedRlEnv
 from mjlab.tasks.registry import list_tasks, load_env_cfg, load_rl_cfg
 
-from leap_walking import robot
+from walking_leap import robot
 
-TASK = "Leap-Walking-Flat-v0"
+TASK = "Walking-Leap-Flat-v0"
 NUM_ENVS = 4
 DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 ACTOR_TERMS = [

@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 The leap-walking authors
+Copyright (c) 2026 The walking-leap authors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -21,6 +21,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ---------------------------------------------------------------------------
-The LEAP Hand model under src/leap_walking/assets/leap_hand/ is derived from
+The LEAP Hand model under src/walking_leap/assets/leap_hand/ is derived from
 MuJoCo Menagerie and is distributed under its own MIT license; see
-src/leap_walking/assets/leap_hand/LICENSE.
+src/walking_leap/assets/leap_hand/LICENSE.
