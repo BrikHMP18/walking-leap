@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+build/
+dist/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+
+# mjlab / RSL-RL outputs (checkpoints, TensorBoard, videos, W&B)
+logs/
+wandb/
+outputs/
+*.onnx
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+MUJOCO_LOG.TXT

@@ -1,0 +1,39 @@
+[project]
+name = "leap-walking"
+version = "0.1.0"
+description = "Emergent finger locomotion for the LEAP Hand V1 with mjlab."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "src/leap_walking/assets/leap_hand/LICENSE"]
+requires-python = ">=3.10,<3.14"
+dependencies = [
+  "mjlab==1.6.1",
+]
+
+[build-system]
+requires = ["uv_build>=0.9,<0.14"]
+build-backend = "uv_build"
+
+# mjlab discovers external tasks through this entry point on import.
+[project.entry-points."mjlab.tasks"]
+leap_walking = "leap_walking"
+
+[dependency-groups]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.14",
+]
+
+[tool.ruff]
+indent-width = 2
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "gpu: needs a CUDA device (skipped automatically when none is available)",
+]
+addopts = "--strict-markers"
