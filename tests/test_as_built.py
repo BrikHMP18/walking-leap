@@ -88,9 +88,14 @@ def test_cover_holds_the_imu_down():
   assert top["imu_board"] == pytest.approx(0.0040, abs=1e-4)
   assert top["imu_case"] == pytest.approx(0.0150, abs=1e-4)
   assert top["imu_cover"] == pytest.approx(0.0174, abs=1e-4)
-  # The contact box has the cover's height.
+  # The contact box has the cover's height and ends where its roof does.
   box = m.geom("imu_collision").id
   assert d.geom_xpos[box][2] + m.geom_size[box][2] - lid == pytest.approx(0.0174)
+  cover = mesh_vertices(m, d, "imu_cover")
+  roof = cover[cover[:, 2] - lid > 0.0173][:, :2]
+  half = m.geom_size[box][:2]
+  assert np.allclose(roof.min(axis=0), d.geom_xpos[box][:2] - half, atol=2e-4)
+  assert np.allclose(roof.max(axis=0), d.geom_xpos[box][:2] + half, atol=2e-4)
 
 
 def test_feet_are_longer_and_grippier_than_the_tips():

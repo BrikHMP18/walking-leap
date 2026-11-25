@@ -286,7 +286,9 @@ reward, over one 10 s rollout (walking) or 128 rollouts of the whole clip (anima
 | `Walking-Leap-Flat-v2`, as in this repository, 3,000 iterations (`logs/rsl_rl/walking_leap_flat/2026-11-24_22-03-48_as_built_crawl`) | slow real steps (0.67 Hz) on three digits, 0.027 m/s, 0.26 m in 10 s, turning 56° on the way; the index stays up 95 % of the time; motors at their cap 2.3 % of joint-steps |
 
 The walking runs had an earlier IMU holder (47 g instead of 58). The cover gained room
-for the board's pins after the animation runs; its masses in the model are the same.
+for the board's pins after the animation runs: its masses in the model are the same, its
+contact box is 0.9 mm longer. The "randomized, cables" policy replayed on it stays within
+1 point of its column below.
 
 **Animation** `hello`: "nominal" (`Walking-Leap-Motion-Flat-v0`, 2,000 iterations,
 `logs/rsl_rl/walking_leap_motion/2026-11-25_01-19-49_v3_nominal`), "randomized, cables"

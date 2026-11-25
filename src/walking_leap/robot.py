@@ -161,7 +161,8 @@ IMU_PAD_T = 0.0024  # C, thickness of the pad between lid and board.
 IMU_BOARD_CENTER = (0.0, -0.0012)  # C, from LID_CENTER (forward, thumb side).
 IMU_BOARD_SIZE = (0.034, 0.040, 0.0016)  # D, with the board turned as mounted.
 IMU_CASE_SIZE = (0.030, 0.026, 0.011)  # D, the aluminium case on the board.
-IMU_COVER_SIZE = (0.0348, 0.040, 0.0174)  # C, cover over the board, from the lid up.
+IMU_COVER_SIZE = (0.0348, 0.0409, 0.0174)  # C, cover over board and pins, from the lid.
+IMU_COVER_CENTER = (0.0, -0.00075)  # C, from LID_CENTER: the pin end is longer.
 IMU_MASS = 0.019  # D.
 IMU_COVER_MASS = 0.013  # C: PETG, 11 g (2 walls) to 14 g (solid).
 IMU_PAD_MASS = 0.004  # C: PETG.
@@ -255,7 +256,7 @@ def add_imu(spec: mujoco.MjSpec) -> None:
   mount.add_geom(
     name="imu_collision",
     type=box,
-    pos=(bx, by, 0.5 * IMU_COVER_SIZE[2]),
+    pos=(*IMU_COVER_CENTER, 0.5 * IMU_COVER_SIZE[2]),
     size=[0.5 * size for size in IMU_COVER_SIZE],
     mass=0.0,
     group=3,
