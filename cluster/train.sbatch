@@ -23,6 +23,9 @@ cd "$SLURM_SUBMIT_DIR"
 source cluster/env.sh
 export UV_OFFLINE=1 # compute nodes have no internet; uv sync ran on the login node
 export WANDB_MODE=offline
+# Write progress to the Slurm log as it happens. In the first array job, two of
+# three tasks trained normally but their log stopped after wandb.init.
+export PYTHONUNBUFFERED=1 WANDB_CONSOLE=off
 
 seed=$((42 + ${SLURM_ARRAY_TASK_ID:-0}))
 echo "commit $(git rev-parse --short HEAD), seed $seed, node $(hostname)"
