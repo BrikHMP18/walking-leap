@@ -45,4 +45,6 @@ def walking_leap_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
     # uses W&B in offline mode.
     logger="tensorboard",
     wandb_project="walking-leap",
+    # W&B gets metrics only; checkpoints are archived on Hugging Face.
+    upload_model=False,
   )
