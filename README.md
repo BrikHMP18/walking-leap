@@ -187,7 +187,7 @@ What goes on the real hand on top of the stock one, as child bodies without join
 | Part | In the model | Source |
 | --- | --- | --- |
 | Feet: a thin TPU 95A sock on each fingertip (designed, not printed yet) | one 64-point convex mesh each, 4.8 g, 2.2 mm longer than the tip, friction 0.6 (expect 0.4 to 0.9), soft contact | CAD; friction and softness assumed |
-| IMU: SYD TransducerM TM171 on a thin pad, under a cover on three M6 bolts of the back lid (both designed, not printed yet) | 58 g with its USB plug, centre at (-56, -35, 18) mm from the palm origin, one contact box without the bosses and the plug, site `imu`, sensors `imu_ang_vel` and `imu_upvector` in the IMU's own axes | datasheet and CAD; bolts and plug assumed |
+| IMU: SYD TransducerM TM171 on a thin pad, under a cover on three M6 bolts of the back lid (printed, not weighed) | 58 g with its USB plug, centre at (-56, -35, 18) mm from the palm origin, one contact box without the bosses and the plug, site `imu`, sensors `imu_ang_vel` and `imu_upvector` in the IMU's own axes | datasheet and CAD; bolts and plug assumed |
 | Cables: the IMU's USB, the hand's USB and power | not modelled as bodies; `Walking-Leap-Motion-Flat-v1` pulls on the IMU mount and the palm with a random steady force (up to 0.15 N an axis each) and torque (0.01 N·m), changed every 1 to 4 s | guessed |
 | Thumb limits | `th_axl` -0.47..2.443, `th_mcp` -1.20..1.90 rad | LEAP authors' URDF and API; Menagerie's file has them shifted by one joint |
 | Torque cap | 0.181 N·m: 350 mA, the API's default, on the datasheet's stall point | estimated |
@@ -281,7 +281,8 @@ reward, over one 10 s rollout (walking) or 128 rollouts of the whole clip (anima
 | `Walking-Leap-Flat-v2`, second terms (at most one foot up), stopped at 430 | the index held up for good (2 % contact), 0.42 m in 10 s |
 | `Walking-Leap-Flat-v2`, as in this repository, 3,000 iterations (`logs/rsl_rl/walking_leap_flat/2026-11-24_22-03-48_as_built_crawl`) | slow real steps (0.67 Hz) on three digits, 0.027 m/s, 0.26 m in 10 s, turning 56° on the way; the index stays up 95 % of the time; motors at their cap 2.3 % of joint-steps |
 
-The walking runs had an earlier IMU holder (47 g instead of 58).
+The walking runs had an earlier IMU holder (47 g instead of 58). The cover gained room
+for the board's pins after the animation runs; its masses in the model are the same.
 
 **Animation** `hello`: "nominal" (`Walking-Leap-Motion-Flat-v0`, 2,000 iterations,
 `logs/rsl_rl/walking_leap_motion/2026-11-25_01-19-49_v3_nominal`), "randomized, cables"
@@ -369,8 +370,8 @@ per env), seed 42, TensorBoard logging.
   be reconciled before deployment.
 - The hand's real mass is not verified (no official figure found); the model
   has 0.746 kg.
-- The as-built hand's parts are designed, not printed: weights, grip and fit are CAD
-  and assumptions. Its folded-thumb stance has not been tried on the real hand.
+- The as-built hand's feet are designed, not printed; the IMU holder is printed, not
+  weighed. Weights and grip are CAD and assumptions. Its folded-thumb stance has not been tried on the real hand.
 - Static support is verified in simulation only, for one nominal pose.
 
 ## References and acknowledgments
