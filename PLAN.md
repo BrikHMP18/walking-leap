@@ -142,6 +142,9 @@ The trainings below that are checked come from a branch, not from this milestone
   - [x] Stiffness at gains 1200 / 0 / 600 from five scripted runs replayed in simulation:
         2.2-3.0 N·m/rad (docs/real_hand.md, "Simulation against the real hand"); torque per
         amp not measured
+  - [x] Contact friction against the same runs: the heading gap is torsional friction the
+        model leaves out (`condim=3`); 0.003 m at the tips and 0.03 m elsewhere halve it
+        (docs/next_training.md). Not in the model yet
 - [ ] Reconcile joint conventions: hardware order (side, forward, pip, dip) vs. MJCF
       (mcp, rot, pip, dip); thumb limits in `LEAPsim_limits` vs. Menagerie
   - [x] Thumb limits: the as-built hand uses LEAP's own
@@ -153,6 +156,7 @@ The trainings below that are checked come from a branch, not from this milestone
         simulation on the hand (docs/real_hand.md); yaw axis and noise model not yet
 - [ ] Communication latency (Dynamixel bus) and observation/action delay
 - [ ] Domain randomization (only after nominal physics is validated)
+  - [ ] Ranges centered on the real hand's numbers (docs/next_training.md)
 - [ ] Policy export (ONNX) and inference timing
   - [x] The animation policy in plain numpy, equal to its ONNX export within 3e-7; runs in
         the 50 Hz loop with the loop under 1 ms late typically

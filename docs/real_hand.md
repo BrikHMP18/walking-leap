@@ -9,19 +9,20 @@ before the next training batch, and to have a control loop that works end to end
 
 - **It stands up on its own, does push-ups, sways, lifts one finger at a time, and
   crawls forward.** Six cycles of the scripted crawl took it past a 12 cm object (the
-  simulation says 14 cm). Every run but one finished standing and lay back down by
+  simulation says 14.7 cm); played a second time, it finished again. Every run but one finished standing and lay back down by
   itself; that one was cut by a bug in our loop (it let go of the torque while
   standing: the hand sank onto its fingers, no impact), since fixed.
 - **The simulator is close.** Given the same motor commands, the simulated palm's
   "down" stays within about 1.6° of the real IMU's on average, over five runs and
   every kind of motion (95 % of the time within about 3°).
-- **What it gets wrong:** how much the hand turns while it shuffles (the sim turns about twice as
-  much when standing up and lying down, and the other way while crawling), and how
-  far it rolls when a finger lifts (the sim rolls about twice as far).
-- **For the next batch:** servo stiffness of at least about 2.2 N·m/rad at the gains used
-  (the model's 3.0 fits about as well; 1.6 does not); the stock
-  fingertips on wood; LEAP's own thumb limits; the IMU on the back. Randomize heading
-  slip and roll compliance, not only friction.
+- **What it gets wrong:** how much the hand turns while it shuffles (the sim turns more
+  when standing up and lying down, and the other way while crawling), and how far it
+  rolls when a finger lifts (the sim rolls about twice as far). Most of the turning is
+  torsional friction the model leaves out: with it, the crawl turns like the real one
+  ([next_training.md](next_training.md)).
+- **For the next batch:** [next_training.md](next_training.md): the hand as it is, the
+  scripted crawl as the clip to imitate, torsional friction on, the motors centered on
+  2.2-3.0 N·m/rad.
 - **The trained `hello` policy ran in the shadow** (computing from the real sensors,
   sending nothing): its targets stayed 0.046 rad from the clip on average, the same as
   in simulation (0.048).
@@ -49,7 +50,7 @@ before the next training batch, and to have a control loop that works end to end
 | taps | each finger lifted 10 mm in turn, palm shifted off it first | done, at most 7.7° from the simulation |
 | `hello` opening, policy in the shadow | the first 4.6 s of `hello` (two push-ups and a stretch), played open loop | done; the policy's targets 0.046 rad from the clip on average |
 | crawl, 3 cycles | see below | done; it moved forward (not measured) |
-| crawl, 6 cycles | see below | done; **past a 12 cm object** (simulation: 14 cm) |
+| crawl, 6 cycles, twice | see below | done both times; the first went **past a 12 cm object** (simulation: 14.7 cm), the second wasn't measured |
 
 Motor temperatures stayed at 21-24 °C. The hardest-working motor while standing used
 about 130 mA of the 350; on the way up the ring finger touches the limit for an instant.
@@ -118,9 +119,11 @@ IMU measures in the palm's frame.
   same number.**
 - **Friction:** below 0.5 the stand-up goes wrong in simulation (the 20° row). Above it,
   these slow motions can't tell.
-- **Heading:** the real hand turned −12° to −18° while standing up and +17° lying
-  down; the simulation, −24° and +32° (up to twice as much). While crawling, real −5° to −7°, simulation
-  +4° to +10°. How the fingertips slip and turn on wood is the clearest gap.
+- **Heading:** over five runs the real hand turned −8° to −22° while standing up and
+  +11° to +19° lying down, the simulation −23° and +31° every time. While crawling,
+  real −5° to −7°, simulation +5° to +10°: the other way. The model has no torsional
+  friction (`condim=3`); turning it on fixes the crawl and halves the error overall
+  ([next_training.md](next_training.md), "Torsional friction: the test").
 - **Roll when a finger lifts:** the simulated palm rolls about twice as far as the real one
   (the "thumb side" plot above).
 - **The thumb:** in one early test the thumb stopped at the current limit with
@@ -134,18 +137,13 @@ IMU measures in the palm's frame.
 - Anything about a learned policy driving the hand: the policy only ran in the shadow.
 - Balance when pushed, faster gaits, the foot socks, other floors.
 - The crawl's distance is one measurement against an object, not a track; the 3-cycle
-  crawl was not measured.
+  crawl and the second 6-cycle one were not measured.
 - The torque the motors really make.
 
 ## For the next training batch
 
-1. The hand as it is: stock fingertips (or socks once printed and measured), LEAP's own
-   thumb limits, the IMU and its holder.
-2. Servo stiffness about 2.2-3.0 N·m/rad at 1200 / 0 / 600 (the joints rule out 1.6); randomize
-   around it.
-3. Randomize what doesn't match: rotational slip of the fingertips (heading), and the
-   palm's roll when a finger lifts. Fingertip friction 0.5-1.0 on wood.
-4. Measure the torque per amp before trusting the 0.18 N·m cap.
+See [next_training.md](next_training.md): what the model should change, the torsional
+friction test, the crawl as the clip to imitate, and what to measure next.
 
 ## How it was run
 

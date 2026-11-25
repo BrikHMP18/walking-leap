@@ -20,6 +20,8 @@ is not solved. **On the real hand** (scripts only, no policy driving yet): it st
 on its own, does push-ups, lifts one finger at a time and crawls forward 12+ cm in
 six scripted cycles; the simulator's gravity direction matches the real IMU's within
 about 1.6° on average. See [docs/real_hand.md](docs/real_hand.md) and [PLAN.md](PLAN.md).
+What the next training batch should change, from all of it:
+[docs/next_training.md](docs/next_training.md).
 
 | Zero action: drops ≤ 5 mm and stands | Joint sweep (gravity off): each digit in turn | Random actions: untrained behavior |
 | :---: | :---: | :---: |
@@ -60,7 +62,8 @@ tests/
   test_motion.py   Animations and the motion-imitation environment
 docs/
   render_media.py  Renders the README images/GIFs into docs/media/
-  real_hand.md     The first runs on the real hand: what ran, sim against real, next steps
+  real_hand.md     The first runs on the real hand: what ran, sim against real
+  next_training.md What the next training batch should change, and why
 PLAN.md            Roadmap and verified progress
 AGENTS.md          Conventions for contributors and coding agents
 ```
@@ -370,9 +373,13 @@ per env), seed 42, TensorBoard logging.
   2.2-3.0 N·m/rad servo at gains 1200 / 0 / 600: docs/real_hand.md); friction coefficients come from
   the Menagerie model.
 - The actor uses angular velocity and gravity direction that would need an IMU
-  on the palm; its mass, noise and latency are not modelled.
-- No observation noise, actuation delay or domain randomization (nominal physics
-  first, by design).
+  on the palm; its mass is modelled in the as-built hand, its noise and latency only
+  in the randomized animation task (`-Motion-Flat-v1`).
+- The walking tasks have no observation noise, actuation delay or domain
+  randomization (nominal physics first, by design).
+- Contacts have no torsional friction (`condim=3`): a fingertip spins on the floor
+  for free, and the simulated hand turns the other way from the real one while
+  crawling (docs/next_training.md).
 - Joint conventions differ from the LEAP hardware API: the API orders each finger
   (side, forward, pip, dip) while the MJCF orders (mcp, rot, pip, dip), and the
   API's thumb limits (`LEAPsim_limits`) differ from the Menagerie ones. Both must
