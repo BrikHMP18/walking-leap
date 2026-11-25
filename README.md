@@ -13,6 +13,8 @@ blue +z = back of the hand. Orange dots are the four ground contacts.*
 
 ## Status
 
+**New here, or picking this branch up: [docs/handoff.md](docs/handoff.md)** (what the branch adds, how to run it, what to train next, the hardware).
+
 **Foundation, and first policies in simulation.** The robot, the physics and the mjlab
 tasks are in place and tested. One animation is learned and one baseline walks, one
 training seed each, in simulation only ("First runs"); walking with the as-built hand
@@ -63,7 +65,10 @@ tests/
 docs/
   render_media.py  Renders the README images/GIFs into docs/media/
   real_hand.md     The first runs on the real hand: what ran, sim against real
+  handoff.md       Start here: what this branch adds, how to run it, what to train next
   next_training.md What the next training batch should change, and why
+  data/real_clips/ The joint targets the real hand played (50 Hz, with the sim's IMU reading)
+hardware/          The printed parts, latest versions: IMU mount, foot socks (STL, STEP, licences)
 PLAN.md            Roadmap and verified progress
 AGENTS.md          Conventions for contributors and coding agents
 ```
