@@ -6,6 +6,7 @@ No time estimates.
 
 Scope of the current milestone: **the foundation only** (phases 1–4). No policy
 training beyond PPO smoke tests and no hardware work until phase 5 is approved.
+The trainings below that are checked come from a branch, not from this milestone.
 
 ---
 
@@ -85,15 +86,20 @@ training beyond PPO smoke tests and no hardware work until phase 5 is approved.
 ## Milestone B — Learning in simulation (not started; needs approval to train)
 
 ### Phase 5 — Standing and balance
-- [ ] Baseline run with the current config (fixed seed, logged metrics)
+- [x] Baseline run with the current config (fixed seed, logged metrics): seed 42, one
+      run; README "First runs"
 - [ ] Decide whether a standing-only command (`vx = 0`) phase is needed first
 - [ ] Evaluate alternative support poses (lower stance, different thumb placement)
+  - [x] Folded-thumb stance on the as-built hand: holds 4 s (`test_stands_on_its_feet`),
+        palm range on planted feet (README "As-built hand")
 - [ ] Confirm static support margins against the identified actuator limits
 - [ ] Stability evaluation: tilt, palm contact frequency, time without falling
 
 ### Phase 6 — Forward locomotion
-- [ ] Train forward walking at 0.05 m/s; several seeds
+- [ ] Train forward walking at 0.05 m/s; several seeds (one so far: README "First runs")
 - [ ] Analyze the emergent gait (contact patterns per digit, slip, palm contact)
+- [ ] Rewards for the as-built hand: the base ones are met by holding a foot up for
+      good; three sets of gait terms did not change that (README "First runs")
 - [ ] Tune reward weights, action scale, termination thresholds
 - [ ] Physical plausibility audit (saturation, penetration, impacts, reward hacking)
 - [ ] Locomotion metrics reported separately from reward
@@ -112,15 +118,28 @@ training beyond PPO smoke tests and no hardware work until phase 5 is approved.
 - [ ] Ground friction / surface variation
 - [ ] Robustness evaluation protocol
 
+### Animations (motion imitation)
+- [x] Clips written as keyframes, solved with planted feet (`tests/test_motion.py`)
+- [x] Imitation environment whose actor sees encoders and IMU only
+      (`test_actor_sees_only_encoders_and_imu`)
+- [x] `hello` imitated in simulation, nominal and randomized: README "First runs"
+- [ ] Several seeds; several clips with one policy
+- [ ] The same clips with a learned world model
+- [ ] Clips recorded from a human hand
+
 ---
 
 ## Milestone C — Real hardware (not started)
 
 ### Phase 9 — Sim-to-real preparation
 - [ ] Measure real hand mass and inertia (with IMU, cables, mounts)
+  - [x] Feet and IMU in the model, from CAD and datasheets (`tests/test_as_built.py`);
+        weights, grip and fit not measured
 - [ ] Actuator identification: torque at the configured current limit, gains, armature, friction
 - [ ] Reconcile joint conventions: hardware order (side, forward, pip, dip) vs. MJCF
       (mcp, rot, pip, dip); thumb limits in `LEAPsim_limits` vs. Menagerie
+  - [x] Thumb limits: the as-built hand uses LEAP's own
+        (`test_thumb_limits_are_leaps_own`)
 - [ ] IMU choice and mounting; sensor noise models
 - [ ] Communication latency (Dynamixel bus) and observation/action delay
 - [ ] Domain randomization (only after nominal physics is validated)
