@@ -138,16 +138,36 @@ def net_displacement(
   return torch.norm(delta, dim=-1)
 
 
-def contact_slip_speed(
-  env: ManagerBasedRlEnv, sensor_name: str, asset_cfg: SceneEntityCfg = _ROBOT
+def lin_vel_tracking_error(
+  env: ManagerBasedRlEnv, command_name: str, asset_cfg: SceneEntityCfg = _ROBOT
 ) -> torch.Tensor:
-  """Mean horizontal sliding speed (m/s) at the sensor's ground contacts.
+  """Horizontal velocity tracking error |v_cmd,xy - v_xy| (m/s), palm frame."""
+  asset: Entity = env.scene[asset_cfg.name]
+  command = env.command_manager.get_command(command_name)
+  assert command is not None
+  actual = asset.data.root_link_lin_vel_b[:, :2]
+  return torch.norm(command[:, :2] - actual, dim=-1)
 
-  For each primary body in contact: the world velocity of the body's material
-  point at the contact position, v_link + w x (p - x_link). A fingertip that
-  rolls or pivots on the ground therefore reads ~0; only sliding counts.
-  Averaged over the primaries in contact, 0 when none is. Needs body primaries,
-  ``fields`` with "found" and "pos", and one slot per primary.
+
+def yaw_rate_tracking_error(
+  env: ManagerBasedRlEnv, command_name: str, asset_cfg: SceneEntityCfg = _ROBOT
+) -> torch.Tensor:
+  """Yaw-rate tracking error |w_cmd,z - w_z| (rad/s), palm frame."""
+  asset: Entity = env.scene[asset_cfg.name]
+  command = env.command_manager.get_command(command_name)
+  assert command is not None
+  return torch.abs(command[:, 2] - asset.data.root_link_ang_vel_b[:, 2])
+
+
+def _contact_slip(
+  env: ManagerBasedRlEnv, sensor_name: str, asset_cfg: SceneEntityCfg
+) -> tuple[torch.Tensor, torch.Tensor]:
+  """Horizontal sliding speed (m/s) at each primary's contact, and contact flags.
+
+  For each primary body: the world velocity of the body's material point at the
+  contact position, v_link + w x (p - x_link). A fingertip that rolls or pivots
+  on the ground therefore reads ~0; only sliding counts. Needs body primaries,
+  ``fields`` with "found" and "pos", and one slot per primary. Shapes [B, P].
   """
   sensor: ContactSensor = env.scene[sensor_name]
   asset: Entity = env.scene[asset_cfg.name]
@@ -157,9 +177,46 @@ def contact_slip_speed(
   vel = asset.data.body_link_lin_vel_w[:, ids] + torch.cross(
     asset.data.body_link_ang_vel_w[:, ids], lever, dim=-1
   )
-  speed = torch.norm(vel[..., :2], dim=-1)
-  in_contact = (sensor.data.found > 0).float()
+  return torch.norm(vel[..., :2], dim=-1), (sensor.data.found > 0).float()
+
+
+def contact_slip_speed(
+  env: ManagerBasedRlEnv, sensor_name: str, asset_cfg: SceneEntityCfg = _ROBOT
+) -> torch.Tensor:
+  """Mean sliding speed (m/s) over the primaries in contact, 0 when none is."""
+  speed, in_contact = _contact_slip(env, sensor_name, asset_cfg)
   return (speed * in_contact).sum(dim=-1) / in_contact.sum(dim=-1).clamp(min=1.0)
+
+
+def contact_slip_rate(
+  env: ManagerBasedRlEnv,
+  sensor_name: str,
+  primary: str,
+  asset_cfg: SceneEntityCfg = _ROBOT,
+) -> torch.Tensor:
+  """Sliding speed (m/s) of one primary while in contact, 0 while lifted.
+
+  Its episode mean is the distance that contact slides per second, so a dragged
+  digit stands out even if the other digits step cleanly.
+  """
+  speed, in_contact = _contact_slip(env, sensor_name, asset_cfg)
+  i = env.scene[sensor_name].primary_names.index(primary)
+  return speed[:, i] * in_contact[:, i]
+
+
+def contact_slip_penalty(
+  env: ManagerBasedRlEnv,
+  sensor_name: str,
+  reference_speed: float,
+  asset_cfg: SceneEntityCfg = _ROBOT,
+) -> torch.Tensor:
+  """Sum over primaries in contact of (sliding speed / reference_speed)^2.
+
+  Dimensionless; use with a negative weight. Squared so that the sub-mm/s
+  vibration of a standing hand costs nothing while dragging is expensive.
+  """
+  speed, in_contact = _contact_slip(env, sensor_name, asset_cfg)
+  return (in_contact * torch.square(speed / reference_speed)).sum(dim=-1)
 
 
 def actuator_saturation(

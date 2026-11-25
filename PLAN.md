@@ -87,25 +87,39 @@ training beyond PPO smoke tests and no hardware work until phase 5 is approved.
 ## Milestone B — Learning in simulation (not started; needs approval to train)
 
 ### Phase 5 — Standing and balance
-- [ ] Cluster training on Alliance Canada (Rorqual) with `cluster/train.sbatch`:
-      verify the driver supports CUDA 13.2, tests pass and H100 throughput in an
-      interactive job; W&B sync and Hugging Face upload of a finished run
-      (offline W&B logging verified locally only)
-- [ ] Baseline run with the current config (fixed seed, logged metrics)
+- [x] Cluster training on Alliance Canada (Rorqual) with `cluster/train.sbatch`:
+      the CUDA 13.2 torch build runs on the H100 nodes; 1.16 s per iteration at
+      4096 envs (interactive job 27622927); offline W&B runs synced and runs
+      uploaded to Hugging Face after job 27623314
+- [ ] Run the test suite on a Rorqual GPU node (run in job 27622927, result not
+      recorded)
+- [x] Baseline run with the current config: job 27623314, `Walking-Leap-Flat-v0`,
+      3000 iterations, seeds 42 and 43 complete, seed 44 stopped at 2700 (time
+      limit); results in README "Status"
 - [ ] Investigate fingertip contact flicker at rest in MuJoCo Warp (~3 % of
       policy steps without contact; absent in CPU MuJoCo); decide whether contact
-      observations and metrics need a substep history or a detection margin
-- [ ] Decide whether a standing-only command (`vx = 0`) phase is needed first
+      observations and metrics need a substep history or a detection margin.
+      The standing hand also vibrates in place: over 64 envs, palm speed up to
+      6.2 mm/s and yaw rate up to 0.016 rad/s, drift <= 1.9 mm in 5 s
+- [x] Decide whether a standing-only command (`vx = 0`) phase is needed first:
+      not needed, v0 learned to walk directly (job 27623314)
 - [ ] Evaluate alternative support poses (lower stance, different thumb placement)
 - [ ] Confirm static support margins against the identified actuator limits
 - [ ] Stability evaluation: tilt, palm contact frequency, time without falling
 
 ### Phase 6 — Forward locomotion
-- [ ] Train forward walking at 0.05 m/s; several seeds
-- [ ] Analyze the emergent gait (contact patterns per digit, slip, palm contact)
+- [x] Train forward walking at 0.05 m/s; several seeds: seeds 42 and 43 reach
+      0.049 m/s from iteration ~300 on, no falls, no palm contact (job 27623314)
+- [ ] Analyze the emergent gait (contact patterns per digit, slip, palm contact).
+      First look from the training metrics: tripod on index, ring and thumb,
+      middle finger on the ground 9–19 % of the time, fingertips sliding at
+      1.3–1.9 cm/s while in contact. Still missing: stride frequency, slip per
+      stance, rollout videos
 - [ ] Tune reward weights, action scale, termination thresholds
-- [ ] Physical plausibility audit (saturation, penetration, impacts, reward hacking)
-- [ ] Locomotion metrics reported separately from reward
+- [ ] Physical plausibility audit (saturation, penetration, impacts, reward hacking).
+      Saturation 0 % in v0; fingertip sliding is the main open question
+- [x] Locomotion metrics reported separately from reward (`Episode_Metrics/*`,
+      used to evaluate job 27623314)
 
 ### Phase 7 — Directional locomotion
 - [ ] Variable forward speed
@@ -113,6 +127,19 @@ training beyond PPO smoke tests and no hardware work until phase 5 is approved.
 - [ ] Turning (yaw rate / heading)
 - [ ] Standing commands
 - [ ] Omnidirectional tracking
+- [ ] `Walking-Leap-Flat-v1`: vx ±0.05, vy ±0.03 m/s, yaw ±0.3 rad/s, resampled
+      every 3–5 s, 15 % zero (implemented; `test_omni_commands_cover_all_directions`,
+      `test_tracking_error_metrics`); train 3 seeds. A policy has to beat the
+      stand-still errors of 0.027 m/s and 0.13 rad/s
+- [ ] Stop the fingertips dragging (in v0 the front digits step but the thumb,
+      the only rear support, is dragged): v1 adds the `tip_slip` penalty and
+      per-tip sliding metrics (`test_gait_metrics`); compare `tip_slip_rate_th`
+      and `digit_contact_th` with v0. If the thumb still drags, revisit the
+      support pose (phase 5) rather than raising the penalty
+- [ ] IMU ablation: `Walking-Leap-Flat-NoImu-v1` (actor without palm IMU, 51
+      dims; `test_no_imu_actor_keeps_privileged_critic`) against v1, 3 seeds
+      each: tracking errors, falls, slip
+- [ ] Keyboard teleoperation of the velocity command in `play`
 
 ### Phase 8 — Robustness
 - [ ] External pushes
@@ -130,7 +157,8 @@ training beyond PPO smoke tests and no hardware work until phase 5 is approved.
 - [ ] Actuator identification: torque at the configured current limit, gains, armature, friction
 - [ ] Reconcile joint conventions: hardware order (side, forward, pip, dip) vs. MJCF
       (mcp, rot, pip, dip); thumb limits in `LEAPsim_limits` vs. Menagerie
-- [ ] IMU choice and mounting; sensor noise models
+- [ ] IMU choice and mounting; sensor noise models (only if the NoImu-v1
+      ablation shows the IMU is needed)
 - [ ] Communication latency (Dynamixel bus) and observation/action delay
 - [ ] Domain randomization (only after nominal physics is validated)
 - [ ] Policy export (ONNX) and inference timing

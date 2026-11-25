@@ -28,7 +28,9 @@ maintainer's explicit approval.
 - Configuration-driven: thresholds, weights and scales are config values, not
   constants buried in functions.
 - Register new variants with `register_mjlab_task` in `__init__.py`; task IDs
-  follow `Walking-Leap-<Terrain>-v<N>`.
+  follow `Walking-Leap-<Terrain>[-<Variant>]-v<N>` (e.g.
+  `Walking-Leap-Flat-NoImu-v1`). Bump `N` when the task changes; never change
+  what an existing ID trains.
 - Style: ruff, 2-space indentation (mjlab's convention), type hints, short
   docstrings that state units and frames.
 

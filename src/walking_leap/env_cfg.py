@@ -1,4 +1,8 @@
-"""Flat-ground forward-walking environment for the LEAP Hand.
+"""Flat-ground walking environments for the LEAP Hand.
+
+  Walking-Leap-Flat-v0        constant forward command (baseline).
+  Walking-Leap-Flat-v1        omnidirectional velocity commands.
+  Walking-Leap-Flat-NoImu-v1  as v1, actor without the palm-IMU observations.
 
 Built directly from mjlab managers instead of mjlab's legged velocity template,
 which carries quadruped assumptions (feet, air time, swing height, terrain
@@ -12,7 +16,7 @@ Reference frames:
   palm   +x wrist->fingertips (robot forward), +y thumb side, +z back of hand.
          Identity orientation = palm down and level (see robot.py).
   command (vx, vy, wz) is expressed in the palm (body) frame, like mjlab's
-         velocity tasks; only vx > 0 is used for now.
+         velocity tasks.
 """
 
 import math
@@ -53,6 +57,35 @@ EPISODE_LENGTH_S = 10.0
 PALM_CONTACT = "palm_ground_contact"
 DIGIT_CONTACT = "digit_ground_contact"
 TIP_CONTACT = "tip_ground_contact"
+
+# Omnidirectional commands (v1), palm frame. Forward 0.05 m/s is reachable
+# (v0 baseline: 0.049 m/s); the backward, lateral and yaw limits are first
+# guesses, not yet shown to be reachable.
+OMNI_LIN_VEL_X = (-0.05, 0.05)  # m/s
+OMNI_LIN_VEL_Y = (-0.03, 0.03)  # m/s
+OMNI_ANG_VEL_Z = (-0.3, 0.3)  # rad/s
+OMNI_STANDING_FRACTION = 0.15  # share of commands that are exactly zero
+OMNI_RESAMPLING_TIME_S = (3.0, 5.0)  # 2-3 commands per 10 s episode
+# Tracking kernels exp(-err^2 / std^2), with stand-still payoffs computed by
+# Monte Carlo over the command distribution above:
+# - Linear: with v0's std of 0.05 m/s a hand that stands still would earn 72 %
+#   of the term, since most v1 commands are slower than v0's. 0.025 m/s (half
+#   the largest speed, mjlab's ratio) brings that to 40 %, close to v0's 37 %.
+# - Yaw: v0 used std 0.5 rad/s, weight 0.5 (stabilization only): standing
+#   still against a 0.3 rad/s command would still earn 67 % of the term. With
+#   0.25 it earns 20 %, while the v0 policy's angular-rate error (~0.1 rad/s
+#   RMS, from its track_ang_vel of 0.48 / 0.5) keeps 85 %.
+LIN_VEL_TRACKING_STD = 0.025  # m/s
+YAW_TRACKING_STD = 0.25  # rad/s
+YAW_TRACKING_WEIGHT = 1.0
+# Fingertip sliding penalty: sum over tips in contact of (slip / 1 cm/s)^2. The
+# v0 gait slid at 1.3-1.9 cm/s on ~2.4 tips, which would cost 0.19-0.43 per
+# second, less than the 1.2 per second that tracking adds over standing still;
+# the standing hand's vibration (< 1 mm/s) costs < 0.002 per second.
+SLIP_REFERENCE_SPEED = 0.01  # m/s
+SLIP_PENALTY_WEIGHT = -0.05
+# Actor terms that need an IMU on the palm (not on the stock hand).
+IMU_OBSERVATIONS = ("base_ang_vel", "projected_gravity")
 
 
 def walking_leap_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
@@ -329,5 +362,62 @@ def walking_leap_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
 
   if play:
     cfg.episode_length_s = int(1e9)
+
+  return cfg
+
+
+def walking_leap_flat_omni_env_cfg(
+  play: bool = False, imu: bool = True
+) -> ManagerBasedRlEnvCfg:
+  """Omnidirectional velocity tracking on flat ground (v1).
+
+  Everything not listed here is v0 (robot, physics, actions, events,
+  terminations, the other reward terms):
+  - commands resampled every 3-5 s from the OMNI_* ranges, 15 % of them zero;
+  - linear and yaw-rate tracking tightened (yaw also weighted) so that moving
+    on command pays more than standing still;
+  - a fingertip-sliding penalty, since the v0 gait partly dragged its tips;
+  - reward-independent tracking-error and per-tip sliding metrics;
+  - ``imu=False`` removes the palm-IMU terms from the actor (51 instead of 57
+    dims). The critic keeps them: it only exists in simulation.
+  """
+  cfg = walking_leap_flat_env_cfg(play=play)
+
+  twist = cfg.commands["twist"]
+  assert isinstance(twist, mdp.VelocityCommandCfg)
+  twist.ranges = mdp.VelocityCommandCfg.Ranges(
+    lin_vel_x=OMNI_LIN_VEL_X, lin_vel_y=OMNI_LIN_VEL_Y, ang_vel_z=OMNI_ANG_VEL_Z
+  )
+  twist.rel_standing_envs = OMNI_STANDING_FRACTION
+  twist.resampling_time_range = OMNI_RESAMPLING_TIME_S
+
+  cfg.rewards["track_lin_vel"].params["std"] = LIN_VEL_TRACKING_STD
+  cfg.rewards["track_ang_vel"].params["std"] = YAW_TRACKING_STD
+  cfg.rewards["track_ang_vel"].weight = YAW_TRACKING_WEIGHT
+  cfg.rewards["tip_slip"] = RewardTermCfg(
+    func=mdp.contact_slip_penalty,
+    weight=SLIP_PENALTY_WEIGHT,
+    params={"sensor_name": TIP_CONTACT, "reference_speed": SLIP_REFERENCE_SPEED},
+  )
+  # Sliding per tip (m/s while in contact, 0 while lifted): shows which digit
+  # drags, e.g. the thumb, the only rear support.
+  for body in FINGERTIP_BODIES:
+    cfg.metrics[f"tip_slip_rate_{body[:2]}"] = MetricsTermCfg(
+      func=mdp.contact_slip_rate, params={"sensor_name": TIP_CONTACT, "primary": body}
+    )
+
+  # mjlab's Metrics/twist/error_vel_* normalize by the longest resampling
+  # window, not the episode, so with resampling they are not per-step means.
+  cfg.metrics["lin_vel_tracking_error"] = MetricsTermCfg(
+    func=mdp.lin_vel_tracking_error, params={"command_name": "twist"}
+  )
+  cfg.metrics["yaw_rate_tracking_error"] = MetricsTermCfg(
+    func=mdp.yaw_rate_tracking_error, params={"command_name": "twist"}
+  )
+
+  if not imu:
+    actor_terms = cfg.observations["actor"].terms
+    for name in IMU_OBSERVATIONS:
+      del actor_terms[name]
 
   return cfg
