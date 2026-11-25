@@ -118,8 +118,12 @@ their own GPU type there.
 - torch in `uv.lock` is built for CUDA 13.2, so compute nodes need an NVIDIA
   driver ≥ 580. Not yet verified on Rorqual: check `nvidia-smi` in the test job.
 - Jobs log to Weights & Biases in offline mode (compute nodes have no internet)
-  and still write the TensorBoard files. After a job, sync W&B and upload the
-  run to Hugging Face from a login node (below).
+  and still write the TensorBoard files. W&B receives metrics only
+  (`upload_model=False`); checkpoints are archived on Hugging Face. After a
+  job, sync W&B and upload the run from a login node (below).
+- Measured on a Rorqual H100 (interactive job, 2026-11-25, 4096 envs): 1.16 s
+  per PPO iteration (~85k env-steps/s), so 3000 iterations take about 1 h; the
+  job asks for 1.5 h. The RTX 5060 Laptop takes 1.79 s per iteration.
 
 One-time setup on a login node (login nodes have internet, compute nodes do
 not):
