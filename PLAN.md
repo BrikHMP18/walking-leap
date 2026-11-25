@@ -122,7 +122,10 @@ The trainings below that are checked come from a branch, not from this milestone
 - [x] Clips written as keyframes, solved with planted feet (`tests/test_motion.py`)
 - [x] Imitation environment whose actor sees encoders and IMU only
       (`test_actor_sees_only_encoders_and_imu`)
-- [x] `hello` imitated in simulation, nominal and randomized: README "First runs"
+- [x] `hello` imitated in simulation, nominal and randomized, with and without the
+      cables' pull (`test_cables_pull_and_change`): README "First runs"
+- [ ] Measure the cables' pull on the bench, set `CABLE_FORCE` from it
+- [ ] The cables' pull in the walking tasks (a dragged cable is not a steady force)
 - [ ] Several seeds; several clips with one policy
 - [ ] The same clips with a learned world model
 - [ ] Clips recorded from a human hand

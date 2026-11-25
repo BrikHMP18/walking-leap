@@ -153,18 +153,25 @@ def add_feet(spec: mujoco.MjSpec) -> None:
     )
 
 
-# IMU: a SYD TransducerM TM171 on a printed plate, held by three M6 bolts on the back
-# lid. Positions in the palm frame, from the LEAP lid's 35 mm bolt square: its centre
-# on the lid's outer face (C).
+# IMU: a SYD TransducerM TM171 on a thin printed pad, held down by a printed cover on
+# three M6 bolts of the back lid. Positions in the palm frame, from the LEAP lid's 35 mm
+# bolt square: its centre on the lid's outer face (C).
 LID_CENTER = (-0.05760, -0.03374, 0.01128)
-IMU_PLATE_T = 0.006  # C, thickness of the printed mount, between lid and board.
+IMU_PAD_T = 0.0024  # C, thickness of the pad between lid and board.
 IMU_BOARD_CENTER = (0.0, -0.0012)  # C, from LID_CENTER (forward, thumb side).
 IMU_BOARD_SIZE = (0.034, 0.040, 0.0016)  # D, with the board turned as mounted.
 IMU_CASE_SIZE = (0.030, 0.026, 0.011)  # D, the aluminium case on the board.
+IMU_COVER_SIZE = (0.0348, 0.040, 0.0174)  # C, cover over the board, from the lid up.
 IMU_MASS = 0.019  # D.
-IMU_MOUNT_MASS = 0.013  # C: PETG, 11 g as sliced to 19 g solid.
+IMU_COVER_MASS = 0.013  # C: PETG, 11 g (2 walls) to 14 g (solid).
+IMU_PAD_MASS = 0.004  # C: PETG.
 IMU_BOLTS = ((0.0, 0.025), (-0.025, 0.0), (0.0315, 0.0))  # C, from LID_CENTER.
-IMU_BOLT_MASS = 0.005  # A: one M6 bolt and its nut.
+IMU_BOLT_MASS = 0.0053  # A: one M6 x 12 flat-head bolt and its nut.
+# The USB-C plug in the board: it leaves on the ring side. Its cable is not modelled;
+# its pull is a random force (motion_cfg.py).
+IMU_PLUG_POS = (0.0062, -0.0342, 0.0057)  # C, from LID_CENTER.
+IMU_PLUG_SIZE = (0.013, 0.026, 0.007)  # A: the plug's body.
+IMU_PLUG_MASS = 0.006  # A.
 # The board is turned a quarter left (seen from above): its pins (its +x) point to the
 # thumb side (palm +y) and its USB-C leaves on the ring side. Columns of R(quat) are
 # the IMU's axes in the palm frame: palm x = -imu y, palm y = +imu x, palm z = imu z.
@@ -172,35 +179,40 @@ IMU_QUAT = (math.sqrt(0.5), 0.0, 0.0, math.sqrt(0.5))
 
 
 def add_imu(spec: mujoco.MjSpec) -> None:
-  """Bolt the IMU and its plate to the back of the palm, with its two sensors.
+  """Hold the IMU under its cover on the back of the palm, with its two sensors.
 
   ``imu_ang_vel`` (rad/s) and ``imu_upvector`` (world z) are in the IMU's own axes,
   like the real board's gyro and gravity outputs.
   """
-  spec.add_mesh(
-    name="imu_mount",
-    file=str(PARTS_DIR / "imu_mount.stl"),  # mm, origin at LID_CENTER.
-    scale=(1e-3, 1e-3, 1e-3),
-    inertia=mujoco.mjtMeshInertia.mjMESH_INERTIA_EXACT,
-  )
+  for part in ("cover", "pad"):
+    spec.add_mesh(
+      name=f"imu_{part}",
+      file=str(PARTS_DIR / f"imu_{part}.stl"),  # mm, origin at LID_CENTER.
+      scale=(1e-3, 1e-3, 1e-3),
+      inertia=mujoco.mjtMeshInertia.mjMESH_INERTIA_EXACT,
+    )
   mount = spec.body(ROOT_BODY).add_body(name="imu_mount", pos=LID_CENTER)
   bx, by = IMU_BOARD_CENTER
   hx, hy, hz = (0.5 * size for size in IMU_BOARD_SIZE)
   cx, cy, cz = (0.5 * size for size in IMU_CASE_SIZE)
-  t = IMU_PLATE_T
+  t = IMU_PAD_T
   box, cylinder = mujoco.mjtGeom.mjGEOM_BOX, mujoco.mjtGeom.mjGEOM_CYLINDER
   board_z = t + hz
   case_z = t + 2 * hz + cz
   # Mass carriers, also what is drawn. The case holds nearly all of the IMU's mass.
   visual = dict(contype=0, conaffinity=0, group=1)
-  mount.add_geom(
-    name="imu_mount",
-    type=mujoco.mjtGeom.mjGEOM_MESH,
-    meshname="imu_mount",
-    mass=IMU_MOUNT_MASS,
-    rgba=(0.20, 0.35, 0.65, 1.0),
-    **visual,
-  )
+  for part, mass, rgba in (
+    ("cover", IMU_COVER_MASS, (0.20, 0.35, 0.65, 1.0)),
+    ("pad", IMU_PAD_MASS, (0.16, 0.16, 0.18, 1.0)),
+  ):
+    mount.add_geom(
+      name=f"imu_{part}",
+      type=mujoco.mjtGeom.mjGEOM_MESH,
+      meshname=f"imu_{part}",
+      mass=mass,
+      rgba=rgba,
+      **visual,
+    )
   mount.add_geom(
     name="imu_board",
     type=box,
@@ -219,23 +231,32 @@ def add_imu(spec: mujoco.MjSpec) -> None:
     rgba=(0.75, 0.76, 0.78, 1.0),
     **visual,
   )
+  mount.add_geom(
+    name="imu_plug",
+    type=box,
+    pos=IMU_PLUG_POS,
+    size=[0.5 * size for size in IMU_PLUG_SIZE],
+    mass=IMU_PLUG_MASS,
+    rgba=(0.10, 0.10, 0.10, 1.0),
+    **visual,
+  )
   for i, (x, y) in enumerate(IMU_BOLTS):
     mount.add_geom(
       name=f"imu_bolt_{i}",
       type=cylinder,
-      pos=(x, y, 0.0056),
+      pos=(x, y, 0.0066),
       size=(0.0050, 0.0026, 0.0),
       mass=IMU_BOLT_MASS,
       rgba=(0.55, 0.56, 0.58, 1.0),
       **visual,
     )
-  # One box for contacts (the thumb can reach behind the palm; falls on the back).
-  height = t + 2 * hz + 2 * cz
+  # One box for contacts (the thumb can reach behind the palm; falls on the back). It
+  # leaves out the three low bosses and the plug.
   mount.add_geom(
     name="imu_collision",
     type=box,
-    pos=(bx, by, 0.5 * height),
-    size=(hx + 0.0012, hy, 0.5 * height),
+    pos=(bx, by, 0.5 * IMU_COVER_SIZE[2]),
+    size=[0.5 * size for size in IMU_COVER_SIZE],
     mass=0.0,
     group=3,
   )

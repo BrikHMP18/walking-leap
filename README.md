@@ -47,7 +47,7 @@ src/walking_leap/
   agent_cfg.py     PPO runner / network configuration
   mdp.py           The few MDP terms mjlab does not provide
   assets/leap_hand/  Unmodified MuJoCo Menagerie right_hand.xml + meshes (MIT)
-  assets/parts/    Feet and IMU mount (see "As-built hand"; licences inside)
+  assets/parts/    Feet, IMU cover and pad (see "As-built hand"; licences inside)
   assets/clips/    Solved animations, written by clips.py
 tests/
   test_robot.py    Model structure and physics (plain MuJoCo, CPU)
@@ -79,7 +79,7 @@ uv run list-envs        # Walking-Leap-Flat-v0 must be listed
 | `Walking-Leap-Flat-v1` | as built, 350 mA | the same rewards |
 | `Walking-Leap-Flat-v2` | as built, 350 mA | with gait terms |
 | `Walking-Leap-Motion-Flat-v0` | as built, 350 mA | play an animation |
-| `Walking-Leap-Motion-Flat-v1` | as built, 350 mA | the same, with kicks, noise, delay and random numbers |
+| `Walking-Leap-Motion-Flat-v1` | as built, 350 mA | the same, with kicks, cables, noise, delay and random numbers |
 
 ## Usage
 
@@ -129,7 +129,7 @@ uv run play Walking-Leap-Motion-Flat-v1 \
 ## Tests
 
 ```sh
-uv run pytest                              # 43 tests: 22 robot/physics, 21 clips and environments
+uv run pytest                              # 46 tests: 23 robot/physics, 23 clips and environments
 CUDA_VISIBLE_DEVICES="" uv run pytest      # CPU only (~45 s)
 uv run ruff check src tests docs && uv run ruff format --check src tests docs
 uv run python docs/render_media.py         # regenerate docs/media/
@@ -186,18 +186,19 @@ What goes on the real hand on top of the stock one, as child bodies without join
 
 | Part | In the model | Source |
 | --- | --- | --- |
-| Feet: a thin TPU 95A sock on each fingertip (printed) | one 64-point convex mesh each, 4.8 g, 2.2 mm longer than the tip, friction 0.6 (expect 0.4 to 0.9), soft contact | CAD; friction and softness assumed |
-| IMU: SYD TransducerM TM171 on a printed mount, three M6 bolts on the back lid | 47 g with its centre at (-56, -33, 19) mm from the palm origin, one contact box, site `imu`, sensors `imu_ang_vel` and `imu_upvector` in the IMU's own axes | datasheet and CAD; bolts assumed |
+| Feet: a thin TPU 95A sock on each fingertip (designed, not printed yet) | one 64-point convex mesh each, 4.8 g, 2.2 mm longer than the tip, friction 0.6 (expect 0.4 to 0.9), soft contact | CAD; friction and softness assumed |
+| IMU: SYD TransducerM TM171 on a thin pad, under a cover on three M6 bolts of the back lid (both designed, not printed yet) | 58 g with its USB plug, centre at (-56, -35, 18) mm from the palm origin, one contact box without the bosses and the plug, site `imu`, sensors `imu_ang_vel` and `imu_upvector` in the IMU's own axes | datasheet and CAD; bolts and plug assumed |
+| Cables: the IMU's USB, the hand's USB and power | not modelled as bodies; `Walking-Leap-Motion-Flat-v1` pulls on the IMU mount and the palm with a random steady force (up to 0.15 N an axis each) and torque (0.01 N·m), changed every 1 to 4 s | guessed |
 | Thumb limits | `th_axl` -0.47..2.443, `th_mcp` -1.20..1.90 rad | LEAP authors' URDF and API; Menagerie's file has them shifted by one joint |
 | Torque cap | 0.181 N·m: 350 mA, the API's default, on the datasheet's stall point | estimated |
 
 ![As-built hand: three views](docs/media/as_built.png)
 
-*As-built hand in the folded-thumb stance: orange feet, the IMU (green board, silver
-case) on its blue mount.*
+*As-built hand in the folded-thumb stance: orange feet, the IMU under its blue cover,
+its USB plug (black) on the ring side.*
 
 The IMU is turned a quarter left on its mount: palm x = −IMU y, palm y = IMU x,
-palm z = IMU z (`test_imu_axes`). The hand weighs 0.812 kg with its parts.
+palm z = IMU z (`test_imu_axes`). The hand weighs 0.823 kg with its parts.
 
 **Folded-thumb stance.** With the limits above the thumb can also stand folded under
 the palm the other way round. On planted feet the palm then moves −60/+27 mm in height
@@ -209,7 +210,7 @@ and ±41° in yaw (−18/+6 mm, −17/+34° in the nominal pose), for the same j
 A clip is a path of the palm plus finger gestures, written by hand. Feet that are not
 lifted stay planted: their joints are solved frame by frame. `hello` (22.4 s): two
 push-ups, a stretch, hip circles, look left and right, wave with the index, drum the
-fingers, bow. `clips.report` gives its margins: 8 mm of balance at worst, 0.1 rad from
+fingers, bow. `clips.report` gives its margins: 7.8 mm of balance at worst, 0.1 rad from
 a joint limit, 4.5 rad/s at the fastest joint.
 
 ![The hello clip in physics](docs/media/hello.gif)
@@ -280,32 +281,54 @@ reward, over one 10 s rollout (walking) or 128 rollouts of the whole clip (anima
 | `Walking-Leap-Flat-v2`, second terms (at most one foot up), stopped at 430 | the index held up for good (2 % contact), 0.42 m in 10 s |
 | `Walking-Leap-Flat-v2`, as in this repository, 3,000 iterations (`logs/rsl_rl/walking_leap_flat/2026-11-24_22-03-48_as_built_crawl`) | slow real steps (0.67 Hz) on three digits, 0.027 m/s, 0.26 m in 10 s, turning 56° on the way; the index stays up 95 % of the time; motors at their cap 2.3 % of joint-steps |
 
-**Animation** `hello` (`Walking-Leap-Motion-Flat-v0`, 2,000 iterations, "nominal", and
-`-v1`, 3,000 iterations, "randomized"), against playing the clip's joints as targets
-without a policy. Finished means upright to the end of the clip; the distance is the
-mean error of the tracked links, root-relative.
+The walking runs had an earlier IMU holder (47 g instead of 58).
 
-| Change | Clip as targets | Nominal | Randomized |
-| --- | --- | --- | --- |
-| as designed | 100 % (1.9 mm) | 100 % (1.5 mm) | 100 % (1.3 mm) |
-| softer motors (2.0 N·m/rad instead of 3.0) | 100 % (3.0 mm) | 100 % (1.9 mm) | 100 % (1.6 mm) |
-| much softer motors (1.4 N·m/rad) | 83 % (4.6 mm) | 100 % (2.9 mm) | 100 % (2.6 mm) |
-| weaker motors (0.13 N·m) | 100 % (16.8 mm) | 100 % (1.9 mm) | 100 % (1.3 mm) |
-| commands 40 ms late | 98 % (3.6 mm) | 98 % (3.2 mm) | 96 % (3.1 mm) |
-| friction 0.4 | 100 % (1.9 mm) | 100 % (1.5 mm) | 100 % (1.2 mm) |
-| friction 0.3 | 100 % (1.9 mm) | 100 % (1.6 mm) | 100 % (1.2 mm) |
-| 60 g more on the back | 0 % (2.9 mm) | 100 % (1.6 mm) | 100 % (1.2 mm) |
-| encoders off by up to 0.03 rad | 74 % (2.9 mm) | 100 % (2.4 mm) | 100 % (2.1 mm) |
-| kicked every 2 s, up to 0.10 m/s | 91 % (2.0 mm) | 98 % (1.5 mm) | 100 % (1.2 mm) |
-| kicked, up to 0.20 m/s | 59 % (2.3 mm) | 70 % (2.0 mm) | 75 % (1.6 mm) |
-| kicked, up to 0.30 m/s | 33 % (2.9 mm) | 41 % (2.7 mm) | 47 % (2.1 mm) |
-| a bit of everything: 2.0 N·m/rad, 0.15 N·m, 30 ms late, friction 0.5, 30 g more, encoders 0.02 rad, kicks 0.10 m/s | 34 % (12.1 mm) | 88 % (3.5 mm) | 98 % (2.6 mm) |
+**Animation** `hello`: "nominal" (`Walking-Leap-Motion-Flat-v0`, 2,000 iterations,
+`logs/rsl_rl/walking_leap_motion/2026-11-25_01-19-49_v3_nominal`), "randomized, cables"
+(`-v1`, 3,000, `2026-11-25_00-41-24_v3_cables`) and the same without the cables' pull
+("randomized", 3,000, `2026-11-25_00-41-26_v3_nocables`), against playing the clip's
+joints as targets without a policy. Finished means upright to the end of the clip; the
+distance is the mean error of the tracked links, root-relative.
 
-Friction reaches the simulator (checked by reading it back): the clip is slow and its
-feet stand nearly straight, so it needs little of it. Most falls are in the wave, on three
-feet; with late commands they come in the first second, for all three. The randomized
-policy was trained on ranges that include most of the last row's values, and all of this
-is the simulator the policies learned in.
+| Change | Clip as targets | Nominal | Randomized | Randomized, cables |
+| --- | --- | --- | --- | --- |
+| as designed | 100 % (2.0 mm) | 100 % (2.3 mm) | 100 % (1.5 mm) | 100 % (1.8 mm) |
+| softer motors (2.0 N·m/rad instead of 3.0) | 96 % (3.2 mm) | 100 % (2.6 mm) | 100 % (1.8 mm) | 100 % (2.0 mm) |
+| much softer motors (1.4 N·m/rad) | 13 % (5.1 mm) | 100 % (3.4 mm) | 100 % (2.7 mm) | 100 % (2.7 mm) |
+| weaker motors (0.13 N·m) | 100 % (17.0 mm) | 100 % (2.8 mm) | 100 % (1.5 mm) | 100 % (1.8 mm) |
+| commands 40 ms late | 95 % (4.3 mm) | 98 % (3.7 mm) | 98 % (2.7 mm) | 98 % (3.2 mm) |
+| friction 0.4 | 100 % (2.0 mm) | 100 % (2.4 mm) | 100 % (1.5 mm) | 100 % (1.8 mm) |
+| friction 0.3 | 100 % (2.0 mm) | 100 % (2.4 mm) | 100 % (1.6 mm) | 100 % (1.8 mm) |
+| 60 g more on the back | 0 % (3.0 mm) | 100 % (2.3 mm) | 100 % (1.5 mm) | 100 % (1.8 mm) |
+| encoders off by up to 0.03 rad | 65 % (3.0 mm) | 98 % (3.1 mm) | 100 % (2.3 mm) | 100 % (2.5 mm) |
+| kicked every 2 s, up to 0.10 m/s | 87 % (2.1 mm) | 98 % (2.3 mm) | 100 % (1.6 mm) | 100 % (1.9 mm) |
+| kicked, up to 0.20 m/s | 53 % (2.4 mm) | 72 % (2.6 mm) | 75 % (1.9 mm) | 76 % (2.2 mm) |
+| kicked, up to 0.30 m/s | 30 % (3.0 mm) | 38 % (3.2 mm) | 46 % (2.3 mm) | 48 % (2.7 mm) |
+| cables pulling as guessed (As-built hand) | 66 % (2.3 mm) | 99 % (2.4 mm) | 100 % (1.6 mm) | 100 % (1.9 mm) |
+| cables pulling twice that | 32 % (3.1 mm) | 72 % (2.8 mm) | 90 % (1.8 mm) | 97 % (2.0 mm) |
+| cables pulling three times that | 15 % (4.1 mm) | 37 % (3.8 mm) | 55 % (2.3 mm) | 74 % (2.3 mm) |
+| a bit of everything: 2.0 N·m/rad, 0.15 N·m, 30 ms late, friction 0.5, 30 g more, encoders 0.02 rad, kicks 0.10 m/s | 36 % (13.2 mm) | 77 % (4.6 mm) | 98 % (2.9 mm) | 100 % (2.9 mm) |
+| the same, and the cables | 27 % (10.1 mm) | 49 % (5.7 mm) | 88 % (3.1 mm) | 95 % (3.0 mm) |
+
+A steady force at the IMU's USB plug, for the whole clip: the largest pull (N) that all 32
+hands of a direction finished (0.1, 0.2, 0.3, 0.4, 0.6, 0.8, 1.2 N tried; 0 means 0.1 N
+was already too much). The cable leaves on the ring side.
+
+| Pull towards | Clip as targets | Nominal | Randomized | Randomized, cables |
+| --- | --- | --- | --- | --- |
+| fingers | 0.8 | 0.6 | 0.8 | 1.2 |
+| wrist | 0 | 0.3 | 0.4 | 0.8 |
+| thumb side | 0.4 | 0.6 | 0.8 | 0.8 |
+| ring side | 0 | 0.3 | 0.4 | 0.6 |
+| down | 0.1 | 0.4 | 0.8 | 1.2 |
+
+With 128 rollouts a cell is good to about 3 points near 100 % and 9 near 50 %. Friction
+reaches the simulator (checked by reading it back): the clip is slow and its feet stand
+nearly straight, so it needs little of it. Most falls are in the wave, on three feet; with
+late commands they come in the first second, for all four. The randomized policies were
+trained on ranges that include most of the last rows' values, and all of this is the
+simulator the policies learned in. An earlier nominal run, same seed, on the 47 g holder
+ended with 1.5 mm of link error instead of 2.3: one seed says little about small gaps.
 
 ### PPO (`agent_cfg.py`)
 

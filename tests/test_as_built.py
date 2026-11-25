@@ -36,12 +36,17 @@ def nominal_data(m: mujoco.MjModel, lift: float = 0.0) -> mujoco.MjData:
   return d
 
 
-def lowest_point(m, d, name: str) -> float:
+def mesh_vertices(m, d, name: str) -> np.ndarray:
+  """World positions of a mesh geom's vertices."""
   g = m.geom(name).id
   mesh = m.geom_dataid[g]
   start, n = m.mesh_vertadr[mesh], m.mesh_vertnum[mesh]
   vertices = m.mesh_vert[start : start + n]
-  return float((d.geom_xpos[g] + vertices @ d.geom_xmat[g].reshape(3, 3).T)[:, 2].min())
+  return d.geom_xpos[g] + vertices @ d.geom_xmat[g].reshape(3, 3).T
+
+
+def lowest_point(m, d, name: str) -> float:
+  return float(mesh_vertices(m, d, name)[:, 2].min())
 
 
 def test_parts_add_their_mass_and_nothing_else():
@@ -51,7 +56,8 @@ def test_parts_add_their_mass_and_nothing_else():
     name = stock.body(b).name
     assert m.body(name).mass[0] == pytest.approx(stock.body(name).mass[0])
     assert np.allclose(m.body(name).ipos, stock.body(name).ipos)
-  mount = robot.IMU_MASS + robot.IMU_MOUNT_MASS + 3 * robot.IMU_BOLT_MASS
+  mount = robot.IMU_MASS + robot.IMU_COVER_MASS + robot.IMU_PAD_MASS
+  mount += robot.IMU_PLUG_MASS + 3 * robot.IMU_BOLT_MASS
   total = 0.746 + 4 * robot.FOOT_MASS + mount
   assert m.body_subtreemass[m.body("palm").id] == pytest.approx(total, abs=1e-6)
   assert m.body("imu_mount").mass[0] == pytest.approx(mount)
@@ -60,11 +66,31 @@ def test_parts_add_their_mass_and_nothing_else():
 
 
 def test_mount_balance():
-  """Centre of mass of IMU, mount and bolts: on the lid, 7 mm above it."""
+  """Centre of mass of IMU, cover, pad, bolts and plug: on the lid, 7 mm above it."""
   m = build()
   d = nominal_data(m)
   offset = d.xipos[m.body("imu_mount").id] - d.xpos[m.body("palm").id]
-  assert np.allclose(offset, (-0.056, -0.033, 0.019), atol=0.002)
+  assert np.allclose(offset, (-0.056, -0.035, 0.018), atol=0.002)
+
+
+def test_cover_holds_the_imu_down():
+  """The parts stack on the lid: pad, board, case, and the cover round them."""
+  m = build()
+  d = nominal_data(m)
+  lid = d.xpos[m.body("imu_mount").id][2]
+  top = {}
+  for name in ("imu_pad", "imu_cover"):
+    top[name] = mesh_vertices(m, d, name)[:, 2].max() - lid
+  for name in ("imu_board", "imu_case"):
+    g = m.geom(name).id
+    top[name] = d.geom_xpos[g][2] + m.geom_size[g][2] - lid
+  assert top["imu_pad"] == pytest.approx(0.0024, abs=1e-4)
+  assert top["imu_board"] == pytest.approx(0.0040, abs=1e-4)
+  assert top["imu_case"] == pytest.approx(0.0150, abs=1e-4)
+  assert top["imu_cover"] == pytest.approx(0.0174, abs=1e-4)
+  # The contact box has the cover's height.
+  box = m.geom("imu_collision").id
+  assert d.geom_xpos[box][2] + m.geom_size[box][2] - lid == pytest.approx(0.0174)
 
 
 def test_feet_are_longer_and_grippier_than_the_tips():

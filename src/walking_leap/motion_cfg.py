@@ -60,11 +60,22 @@ PUSH_RANGE = {
 }
 
 
+# Steady pull of the cables, per axis and per body: the IMU's USB on its mount, the
+# hand's USB and power on the palm. Guessed: about 0.2 N in all, 2 % of the weight.
+CABLE_BODIES = ("imu_mount", ROOT_BODY)
+CABLE_FORCE = 0.15  # N
+CABLE_TORQUE = 0.01  # N*m
+
+
 def walking_leap_motion_env_cfg(
-  play: bool = False, robust: bool = False, clip: str = "hello"
+  play: bool = False,
+  robust: bool = False,
+  cables: bool = False,
+  clip: str = "hello",
 ) -> ManagerBasedRlEnvCfg:
   """Imitate ``clip``. ``robust`` adds kicks, sensor noise, delay and random numbers
-  for what nobody has measured (the feet's grip, the balance, the motors)."""
+  for what nobody has measured (the feet's grip, the balance, the motors); ``cables``
+  adds a small steady pull that changes every few seconds."""
 
   ##
   # Sensors.
@@ -224,6 +235,23 @@ def walking_leap_motion_env_cfg(
       ),
     }
 
+  if cables:
+    # A wrench stays until the next one: set at reset, changed every 1 to 4 s.
+    pull = {
+      "asset_cfg": SceneEntityCfg("robot", body_names=CABLE_BODIES),
+      "force_range": (-CABLE_FORCE, CABLE_FORCE),
+      "torque_range": (-CABLE_TORQUE, CABLE_TORQUE),
+    }
+    events["cables_at_reset"] = EventTermCfg(
+      func=envs_mdp.apply_external_force_torque, mode="reset", params=pull
+    )
+    events["cables"] = EventTermCfg(
+      func=envs_mdp.apply_external_force_torque,
+      mode="interval",
+      interval_range_s=(1.0, 4.0),
+      params=pull,
+    )
+
   ##
   # Rewards (weights are per second). exp(-error^2 / std^2) of each imitated quantity.
   ##
@@ -341,7 +369,8 @@ def walking_leap_motion_env_cfg(
   if play:
     cfg.episode_length_s = int(1e9)
     cfg.observations["actor"].enable_corruption = False
-    cfg.events.pop("push", None)
+    for disturbance in ("push", "cables_at_reset", "cables"):
+      cfg.events.pop(disturbance, None)
     command = cfg.commands["motion"]
     assert isinstance(command, MotionCommandCfg)
     command.pose_range, command.velocity_range = {}, {}

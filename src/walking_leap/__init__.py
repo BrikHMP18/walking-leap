@@ -36,13 +36,13 @@ register_mjlab_task(
   rl_cfg=walking_leap_ppo_runner_cfg(),
 )
 
-# Motion imitation with the same hand: v0 nominal, v1 with kicks, noise and random
-# grip and balance.
+# Motion imitation with the same hand: v0 nominal, v1 with kicks, cables, noise and
+# random grip, balance and motors.
 for version, robust in (("v0", False), ("v1", True)):
   register_mjlab_task(
     task_id=f"Walking-Leap-Motion-Flat-{version}",
-    env_cfg=walking_leap_motion_env_cfg(robust=robust),
-    play_env_cfg=walking_leap_motion_env_cfg(play=True, robust=robust),
+    env_cfg=walking_leap_motion_env_cfg(robust=robust, cables=robust),
+    play_env_cfg=walking_leap_motion_env_cfg(play=True, robust=robust, cables=robust),
     rl_cfg=walking_leap_motion_ppo_runner_cfg(),
     runner_cls=MotionTrackingOnPolicyRunner,
   )

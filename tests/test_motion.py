@@ -8,7 +8,12 @@ from mjlab.envs import ManagerBasedRlEnv
 from mjlab.tasks.registry import list_tasks, load_env_cfg
 
 from walking_leap import clips, mdp, robot
-from walking_leap.motion_cfg import TRACKED_BODIES
+from walking_leap.motion_cfg import (
+  CABLE_BODIES,
+  CABLE_FORCE,
+  CABLE_TORQUE,
+  TRACKED_BODIES,
+)
 
 TASK = "Walking-Leap-Motion-Flat-v0"
 NUM_ENVS = 4
@@ -133,3 +138,35 @@ def test_playing_the_clip_stays_close(env):
     error = (command.anchor_pos_w - command.robot_anchor_pos_w).norm(dim=-1)
     worst = max(worst, float(error.max()))
   assert worst < 0.02
+
+
+def test_cables_pull_and_change():
+  """v1: a steady wrench on the mount and the palm, within its range, that changes."""
+  cfg = load_env_cfg("Walking-Leap-Motion-Flat-v1")
+  cfg.scene.num_envs = NUM_ENVS
+  cfg.seed = 0
+  env = ManagerBasedRlEnv(cfg, device=DEVICE)
+  try:
+    env.reset()
+    r = env.scene["robot"]
+    ids = r.find_bodies(CABLE_BODIES)[0]
+    others = [i for i in range(r.num_bodies) if i not in ids]
+    seen = []
+    for k in range(260):  # 5.2 s, longer than the longest interval.
+      wrench = r.data.body_external_wrench[:, ids]
+      if k % 20 == 0:
+        seen.append(wrench.clone())
+      env.step(reference_action(env))
+      assert torch.all(wrench[..., :3].abs() <= CABLE_FORCE)
+      assert torch.all(wrench[..., 3:].abs() <= CABLE_TORQUE)
+      assert torch.all(r.data.body_external_wrench[:, others] == 0.0)
+    assert torch.all(seen[0].abs().sum(dim=-1) > 0.0)
+    assert not torch.allclose(seen[0], seen[-1])
+  finally:
+    env.close()
+
+
+def test_play_has_no_disturbance():
+  assert not {"push", "cables", "cables_at_reset"} & set(
+    load_env_cfg("Walking-Leap-Motion-Flat-v1", play=True).events
+  )
