@@ -7,7 +7,9 @@
 #   sbatch cluster/train.sbatch                              # one run, seed 42
 #   sbatch --array=0-2 cluster/train.sbatch                  # seeds 42, 43, 44
 #   sbatch cluster/train.sbatch --agent.max-iterations 10    # extra args go to train
-# The Slurm account comes from SBATCH_ACCOUNT (exported in ~/.bashrc).
+# The Slurm account comes from SBATCH_ACCOUNT, the W&B entity from WANDB_USERNAME
+# (both exported in ~/.bashrc). W&B runs offline into wandb/ (compute nodes have
+# no internet); upload them afterwards from a login node with `wandb sync`.
 #
 #SBATCH --job-name=walking-leap
 #SBATCH --gres=gpu:h100:1
@@ -20,9 +22,10 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 source cluster/env.sh
 export UV_OFFLINE=1 # compute nodes have no internet; uv sync ran on the login node
+export WANDB_MODE=offline
 
 seed=$((42 + ${SLURM_ARRAY_TASK_ID:-0}))
 echo "commit $(git rev-parse --short HEAD), seed $seed, node $(hostname)"
 nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader
 uv run --frozen train Walking-Leap-Flat-v0 --env.scene.num-envs 4096 \
-  --agent.seed "$seed" "$@"
+  --agent.logger wandb --agent.seed "$seed" "$@"

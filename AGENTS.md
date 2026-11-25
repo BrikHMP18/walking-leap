@@ -61,6 +61,10 @@ maintainer's explicit approval.
   `mdp.VelocityCommand` disables it.
 - CPU MuJoCo silently resets the state after a divergence; physics tests must
   check `MjData.warning` counters, not only finiteness.
+- rsl-rl-lib 5.4.2 (pinned by mjlab) passes `start_method` to
+  `wandb.Settings`, which wandb >= 0.29 rejects, so `--agent.logger wandb`
+  crashed at startup. `pyproject.toml` caps wandb below 0.29 through
+  `[tool.uv] constraint-dependencies`; revisit it when upgrading mjlab.
 - Many mjlab APIs changed since older examples (e.g. `RslRlModelCfg`,
   asset loading). Read the installed version's source before using an API.
 

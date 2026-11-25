@@ -40,6 +40,9 @@ def walking_leap_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
     save_interval=100,
     seed=42,
     experiment_name="walking_leap_flat",
-    # Local logging by default; pass --agent.logger wandb to use Weights & Biases.
+    # Local logging by default; pass --agent.logger wandb to use Weights & Biases
+    # (the W&B logger also writes the TensorBoard files). cluster/train.sbatch
+    # uses W&B in offline mode.
     logger="tensorboard",
+    wandb_project="walking-leap",
   )

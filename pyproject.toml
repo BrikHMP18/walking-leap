@@ -24,6 +24,11 @@ dev = [
   "ruff>=0.14",
 ]
 
+[tool.uv]
+# rsl-rl-lib 5.4.2 (pinned by mjlab 1.6.1) calls
+# wandb.Settings(start_method="thread"), which wandb >= 0.29 rejects.
+constraint-dependencies = ["wandb<0.29"]
+
 [tool.ruff]
 indent-width = 2
 src = ["src"]

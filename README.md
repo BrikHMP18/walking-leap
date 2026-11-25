@@ -33,6 +33,7 @@ the same model, physics options and action mapping as the environment.
 | [RSL-RL](https://github.com/leggedrobotics/rsl_rl) | 5.4.2 (via mjlab) | PPO |
 | PyTorch | 2.15 (via mjlab) | Networks |
 | [uv](https://docs.astral.sh/uv/) | tested 0.12.7 | Environment and lock file |
+| [Weights & Biases](https://wandb.ai) | 0.28.2 (capped < 0.29, see AGENTS.md) | Optional logger; used by cluster jobs |
 
 ## Repository layout
 
@@ -116,6 +117,9 @@ their own GPU type there.
   inactivity; if a job fails at import, rerun `uv sync --frozen` on a login node.
 - torch in `uv.lock` is built for CUDA 13.2, so compute nodes need an NVIDIA
   driver ≥ 580. Not yet verified on Rorqual: check `nvidia-smi` in the test job.
+- Jobs log to Weights & Biases in offline mode (compute nodes have no internet)
+  and still write the TensorBoard files. After a job, sync W&B and upload the
+  run to Hugging Face from a login node (below).
 
 One-time setup on a login node (login nodes have internet, compute nodes do
 not):
@@ -126,6 +130,9 @@ cd ~/links/projects/<group>/$USER/repos        # your project space
 git clone git@github.com:BrikHMP18/walking-leap.git && cd walking-leap
 source cluster/env.sh && uv sync --frozen && mkdir -p logs/slurm
 echo 'export SBATCH_ACCOUNT=<account> SALLOC_ACCOUNT=<account>' >> ~/.bashrc  # e.g. def-<pi>_gpu
+echo 'export WANDB_USERNAME=<wandb entity>' >> ~/.bashrc
+uv run --frozen wandb login                   # API key from https://wandb.ai/authorize
+uvx --from huggingface_hub hf auth login      # write token from huggingface.co/settings/tokens
 ```
 
 Before the first submission, check the environment in a short interactive job
@@ -151,8 +158,18 @@ tail -f logs/slurm/walking-leap-<job id>.out
 
 Arguments after the script go to `train`. If a node fails, resubmit with
 `--agent.resume True --agent.load-run <run directory>` to continue from that
-run's latest checkpoint. Copy runs back to view them locally (TensorBoard,
-`play`):
+run's latest checkpoint.
+
+After the job, on a login node, from the repository root and after
+`source cluster/env.sh`:
+
+```sh
+uv run --frozen wandb sync --sync-all         # upload the offline runs in wandb/
+uvx --from huggingface_hub hf upload <hf user>/walking-leap \
+  logs/rsl_rl/walking_leap_flat/<run> runs/<run> --private   # checkpoints, params, git state
+```
+
+To view runs locally (TensorBoard, `play`), copy them back:
 
 ```sh
 rsync -av <cluster>:<repository path>/logs/rsl_rl/ logs/rsl_rl/
