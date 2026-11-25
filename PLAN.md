@@ -61,6 +61,8 @@ training beyond PPO smoke tests and no hardware work until phase 5 is approved.
 - [x] Commands: constant 0.05 m/s forward in the palm frame
 - [x] Metrics independent of reward: forward velocity, net displacement, palm
       contact, actuator saturation, mechanical power, velocity tracking error
+- [x] Gait metrics: ground-contact fraction per digit, fingertip slip speed
+      (`test_gait_metrics`)
 - [x] PPO configuration (RSL-RL via mjlab; actor/critic 256-128-64, mjlab defaults)
 - [x] Smoke tests
   - [x] Env init/reset/step, zero and random actions, finite values, GPU and CPU
@@ -86,6 +88,9 @@ training beyond PPO smoke tests and no hardware work until phase 5 is approved.
 
 ### Phase 5 — Standing and balance
 - [ ] Baseline run with the current config (fixed seed, logged metrics)
+- [ ] Investigate fingertip contact flicker at rest in MuJoCo Warp (~3 % of
+      policy steps without contact; absent in CPU MuJoCo); decide whether contact
+      observations and metrics need a substep history or a detection margin
 - [ ] Decide whether a standing-only command (`vx = 0`) phase is needed first
 - [ ] Evaluate alternative support poses (lower stance, different thumb placement)
 - [ ] Confirm static support margins against the identified actuator limits

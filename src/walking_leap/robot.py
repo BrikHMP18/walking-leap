@@ -54,6 +54,7 @@ JOINT_NAMES: tuple[str, ...] = (
 )  # fmt: skip
 
 FINGER_ROOT_BODIES: tuple[str, ...] = ("if_bs", "mf_bs", "rf_bs", "th_mp")
+FINGERTIP_BODIES: tuple[str, ...] = ("if_ds", "mf_ds", "rf_ds", "th_ds")
 FINGERTIP_GEOMS: tuple[str, ...] = ("if_tip", "mf_tip", "rf_tip", "th_tip")
 
 

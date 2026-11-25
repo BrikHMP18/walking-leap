@@ -76,11 +76,21 @@ def root_height_floor(
   return torch.exp(-torch.square(shortfall / std))
 
 
-def contact_active(env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tensor:
-  """1.0 where any primary of the contact sensor touches its secondary, else 0."""
+def contact_active(
+  env: ManagerBasedRlEnv, sensor_name: str, primary: str | None = None
+) -> torch.Tensor:
+  """1.0 where the sensor's primary touches its secondary, else 0.
+
+  ``primary`` selects one primary by name (e.g. one digit); ``None`` means any
+  primary. Assumes one slot per primary (``reduce="netforce"`` or
+  ``num_slots=1``).
+  """
   sensor: ContactSensor = env.scene[sensor_name]
   assert sensor.data.found is not None
-  return (sensor.data.found > 0).any(dim=-1).float()
+  found = sensor.data.found > 0
+  if primary is not None:
+    return found[:, sensor.primary_names.index(primary)].float()
+  return found.any(dim=-1).float()
 
 
 ##
@@ -126,6 +136,30 @@ def net_displacement(
   asset: Entity = env.scene[asset_cfg.name]
   delta = asset.data.root_link_pos_w[:, :2] - env.scene.env_origins[:, :2]
   return torch.norm(delta, dim=-1)
+
+
+def contact_slip_speed(
+  env: ManagerBasedRlEnv, sensor_name: str, asset_cfg: SceneEntityCfg = _ROBOT
+) -> torch.Tensor:
+  """Mean horizontal sliding speed (m/s) at the sensor's ground contacts.
+
+  For each primary body in contact: the world velocity of the body's material
+  point at the contact position, v_link + w x (p - x_link). A fingertip that
+  rolls or pivots on the ground therefore reads ~0; only sliding counts.
+  Averaged over the primaries in contact, 0 when none is. Needs body primaries,
+  ``fields`` with "found" and "pos", and one slot per primary.
+  """
+  sensor: ContactSensor = env.scene[sensor_name]
+  asset: Entity = env.scene[asset_cfg.name]
+  assert sensor.data.found is not None and sensor.data.pos is not None
+  ids, _ = asset.find_bodies(sensor.primary_names, preserve_order=True)
+  lever = sensor.data.pos - asset.data.body_link_pos_w[:, ids]
+  vel = asset.data.body_link_lin_vel_w[:, ids] + torch.cross(
+    asset.data.body_link_ang_vel_w[:, ids], lever, dim=-1
+  )
+  speed = torch.norm(vel[..., :2], dim=-1)
+  in_contact = (sensor.data.found > 0).float()
+  return (speed * in_contact).sum(dim=-1) / in_contact.sum(dim=-1).clamp(min=1.0)
 
 
 def actuator_saturation(

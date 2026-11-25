@@ -8,7 +8,8 @@ import torch
 from mjlab.envs import ManagerBasedRlEnv
 from mjlab.tasks.registry import list_tasks, load_env_cfg, load_rl_cfg
 
-from walking_leap import robot
+from walking_leap import mdp, robot
+from walking_leap.env_cfg import DIGIT_CONTACT, TIP_CONTACT
 
 TASK = "Walking-Leap-Flat-v0"
 NUM_ENVS = 4
@@ -176,3 +177,35 @@ def test_palm_contact_penalty_and_termination(env):
   assert penalized
   # Fires only after > 1 s (50 policy steps) of continuous palm contact.
   assert ended_at is not None and ended_at >= 50
+
+
+def test_gait_metrics(env):
+  """Per-digit contact and tip slip: planted and still at rest, exact when slid."""
+  env.reset()
+  for _ in range(50):  # 1 s
+    env.step(zero_action(env))
+  assert env.scene[TIP_CONTACT].primary_names == list(robot.FINGERTIP_BODIES)
+  for body in robot.FINGER_ROOT_BODIES:
+    assert torch.all(mdp.contact_active(env, DIGIT_CONTACT, primary=body) == 1.0)
+  assert torch.all(env.scene[TIP_CONTACT].data.found > 0)  # on the four pads
+  assert torch.all(mdp.contact_slip_speed(env, TIP_CONTACT) < 1e-3)
+
+  # Move the standing hand rigidly (joints still): every pad slides with it.
+  r = env.scene["robot"]
+  vel = torch.zeros(env.num_envs, 6, device=env.device)
+  vel[:, 0] = 0.3  # m/s along world x
+  r.write_root_link_velocity_to_sim(vel)
+  env.sim.forward()
+  slip = mdp.contact_slip_speed(env, TIP_CONTACT)
+  assert torch.allclose(slip, torch.full_like(slip, 0.3), atol=2e-3)
+
+  # Spin about the palm's vertical axis: each pad slides at w * horizontal
+  # distance from the palm origin, so the mean is w times the mean distance.
+  vel[:, 0], vel[:, 5] = 0.0, 1.0  # rad/s about world z
+  r.write_root_link_velocity_to_sim(vel)
+  env.sim.forward()
+  pos = env.scene[TIP_CONTACT].data.pos
+  radius = (pos[..., :2] - r.data.root_link_pos_w[:, None, :2]).norm(dim=-1)
+  slip = mdp.contact_slip_speed(env, TIP_CONTACT)
+  assert torch.allclose(slip, radius.mean(dim=-1), atol=2e-3)
+  env.reset()

@@ -103,7 +103,7 @@ Any config field can be overridden from the CLI (`--env.<field>`,
 ## Tests
 
 ```sh
-uv run pytest                              # 22 tests: 14 robot/physics, 8 environment
+uv run pytest                              # 23 tests: 14 robot/physics, 9 environment
 CUDA_VISIBLE_DEVICES="" uv run pytest      # CPU only (~45 s)
 uv run ruff check src tests docs && uv run ruff format --check src tests docs
 uv run python docs/render_media.py         # regenerate docs/media/
@@ -194,8 +194,12 @@ are initial values and have not been tuned by training.
 Terminations: time limit (truncation, not failure), non-finite state, palm tilt
 > 70°, palm on the ground continuously > 1 s. Metrics logged separately from the
 reward (`Episode_Metrics/*`): forward velocity, net displacement, palm contact
-fraction, actuator saturation fraction, mechanical power (mechanical output, not
-electrical consumption), plus mjlab's velocity-tracking errors.
+fraction, ground-contact fraction per digit (`digit_contact_{if,mf,rf,th}`; a
+digit near 1.0 while the hand travels is dragged, not stepped), sliding speed of
+the fingertip pads in contact (`tip_slip_speed`, the velocity of the material
+point at the contact, so rolling reads zero), actuator saturation fraction,
+mechanical power (mechanical output, not electrical consumption), plus mjlab's
+velocity-tracking errors.
 
 ### PPO (`agent_cfg.py`)
 
@@ -216,6 +220,13 @@ per env), seed 42, TensorBoard logging.
   automatic sizing ran out of memory at 4096 envs on 8 GB.
 - Elliptic cones cost throughput: ~51k vs. ~85k env-steps/s for pyramidal
   (4096 envs, RTX 5060 Laptop).
+- In MuJoCo Warp the fingertip contacts of the standing hand flicker: at zero
+  action each digit reads no ground contact in about 3 % of policy steps (239 of
+  256 envs, up to 38 on/off switches in 4 s) although the hand does not move
+  (tip slip ~2 µm/s). CPU MuJoCo with the same options keeps all four contacts
+  continuously (penetration ~0.2 µm). The cause is not established (float32
+  precision against the sub-micron penetration is a candidate). Per-digit
+  contact metrics therefore read ~0.97, not 1.0, at rest.
 - `mdp.VelocityCommand` is mjlab's velocity command without its Viser joystick,
   whose sliders start at 0.1 and crash the viewer for this 0.05 m/s command.
 

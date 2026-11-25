@@ -37,6 +37,7 @@ from walking_leap import mdp
 from walking_leap.robot import (
   EFFORT_LIMIT,
   FINGER_ROOT_BODIES,
+  FINGERTIP_BODIES,
   ROOT_BODY,
   get_leap_hand_cfg,
   joint_limits,
@@ -51,6 +52,7 @@ EPISODE_LENGTH_S = 10.0
 
 PALM_CONTACT = "palm_ground_contact"
 DIGIT_CONTACT = "digit_ground_contact"
+TIP_CONTACT = "tip_ground_contact"
 
 
 def walking_leap_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
@@ -76,6 +78,15 @@ def walking_leap_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     fields=("found", "force"),
     reduce="netforce",
     track_air_time=True,
+  )
+  # Distal links (fingertip pads) only, with the deepest contact's position:
+  # used by the tip-slip metric, not observed by the actor or the critic.
+  tip_contact = ContactSensorCfg(
+    name=TIP_CONTACT,
+    primary=ContactMatch(mode="body", pattern=FINGERTIP_BODIES, entity="robot"),
+    secondary=ContactMatch(mode="body", pattern="terrain"),
+    fields=("found", "pos"),
+    reduce="mindist",
   )
 
   ##
@@ -244,6 +255,20 @@ def walking_leap_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     "palm_ground_contact": MetricsTermCfg(
       func=mdp.contact_active, params={"sensor_name": PALM_CONTACT}
     ),
+    # Fraction of time each digit (any part of it) touches the ground: a digit
+    # near 1.0 while the hand travels is being dragged, not stepped.
+    **{
+      f"digit_contact_{body[:2]}": MetricsTermCfg(
+        func=mdp.contact_active,
+        params={"sensor_name": DIGIT_CONTACT, "primary": body},
+      )
+      for body in FINGER_ROOT_BODIES
+    },
+    # Sliding speed of the fingertip pads in contact (m/s): separates steps from
+    # skating or vibration-driven shuffling.
+    "tip_slip_speed": MetricsTermCfg(
+      func=mdp.contact_slip_speed, params={"sensor_name": TIP_CONTACT}
+    ),
     "actuator_saturation": MetricsTermCfg(
       func=mdp.actuator_saturation, params={"effort_limit": EFFORT_LIMIT}
     ),
@@ -254,7 +279,7 @@ def walking_leap_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     scene=SceneCfg(
       terrain=TerrainEntityCfg(terrain_type="plane"),
       entities={"robot": get_leap_hand_cfg()},
-      sensors=(palm_contact, digit_contact),
+      sensors=(palm_contact, digit_contact, tip_contact),
       num_envs=1,
       env_spacing=1.0,
     ),
