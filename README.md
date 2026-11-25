@@ -16,13 +16,16 @@ blue +z = back of the hand. Orange dots are the four ground contacts.*
 **Foundation, and first policies in simulation.** The robot, the physics and the mjlab
 tasks are in place and tested. One animation is learned and one baseline walks, one
 training seed each, in simulation only ("First runs"); walking with the as-built hand
-is not solved. Nothing has run on hardware. See [PLAN.md](PLAN.md).
+is not solved. **On the real hand** (scripts only, no policy driving yet): it stands up
+on its own, does push-ups, lifts one finger at a time and crawls forward 12+ cm in
+six scripted cycles; the simulator's gravity direction matches the real IMU's within
+about 1.6° on average. See [docs/real_hand.md](docs/real_hand.md) and [PLAN.md](PLAN.md).
 
 | Zero action: drops ≤ 5 mm and stands | Joint sweep (gravity off): each digit in turn | Random actions: untrained behavior |
 | :---: | :---: | :---: |
 | ![zero action](docs/media/zero_action.gif) | ![joint sweep](docs/media/joint_sweep.gif) | ![random actions](docs/media/random_actions.gif) |
 
-All media are rendered by [`docs/render_media.py`](docs/render_media.py) with
+All media but the real hand's (`docs/media/real_*.png`, `standup_sim.png`: from logs) are rendered by [`docs/render_media.py`](docs/render_media.py) with
 the same model, physics options and action mapping as the environment.
 
 ## Technical stack
@@ -57,6 +60,7 @@ tests/
   test_motion.py   Animations and the motion-imitation environment
 docs/
   render_media.py  Renders the README images/GIFs into docs/media/
+  real_hand.md     The first runs on the real hand: what ran, sim against real, next steps
 PLAN.md            Roadmap and verified progress
 AGENTS.md          Conventions for contributors and coding agents
 ```
@@ -355,10 +359,13 @@ per env), seed 42, TensorBoard logging.
 
 ## Known limitations
 
-- The policies of "First runs" are one seed each and have only met this simulator.
+- The policies of "First runs" are one seed each and have only met this simulator
+  (the animation policy has run on the real hand in the shadow only: computing, not
+  driving).
 - Walking with the as-built hand is not solved: see "First runs".
 - Actuator torque limit, stiffness and armature come from the LEAP authors'
-  simulator, not from measurements on hardware; friction coefficients come from
+  simulator, not from measurements on hardware (the real joints track like a
+  2.2-3.0 N·m/rad servo at gains 1200 / 0 / 600: docs/real_hand.md); friction coefficients come from
   the Menagerie model.
 - The actor uses angular velocity and gravity direction that would need an IMU
   on the palm; its mass, noise and latency are not modelled.
@@ -371,7 +378,7 @@ per env), seed 42, TensorBoard logging.
 - The hand's real mass is not verified (no official figure found); the model
   has 0.746 kg.
 - The as-built hand's feet are designed, not printed; the IMU holder is printed, not
-  weighed. Weights and grip are CAD and assumptions. Its folded-thumb stance has not been tried on the real hand.
+  weighed. Weights and grip are CAD and assumptions. The folded-thumb stance works on the real hand (docs/real_hand.md).
 - Static support is verified in simulation only, for one nominal pose.
 
 ## References and acknowledgments

@@ -132,30 +132,45 @@ The trainings below that are checked come from a branch, not from this milestone
 
 ---
 
-## Milestone C — Real hardware (not started)
+## Milestone C — Real hardware (started: scripted motions, see docs/real_hand.md)
 
 ### Phase 9 — Sim-to-real preparation
 - [ ] Measure real hand mass and inertia (with IMU, cables, mounts)
   - [x] Feet and IMU in the model, from CAD and datasheets (`tests/test_as_built.py`);
         weights, grip and fit not measured
 - [ ] Actuator identification: torque at the configured current limit, gains, armature, friction
+  - [x] Stiffness at gains 1200 / 0 / 600 from five scripted runs replayed in simulation:
+        2.2-3.0 N·m/rad (docs/real_hand.md, "Simulation against the real hand"); torque per
+        amp not measured
 - [ ] Reconcile joint conventions: hardware order (side, forward, pip, dip) vs. MJCF
       (mcp, rot, pip, dip); thumb limits in `LEAPsim_limits` vs. Menagerie
   - [x] Thumb limits: the as-built hand uses LEAP's own
         (`test_thumb_limits_are_leaps_own`)
+  - [x] Joint order on the hardware: each joint moved alone, and every scripted clip in
+        docs/real_hand.md played as in simulation
 - [ ] IMU choice and mounting; sensor noise models
+  - [x] TM171 on the back of the hand; gravity x and y and gyro x and y checked against the
+        simulation on the hand (docs/real_hand.md); yaw axis and noise model not yet
 - [ ] Communication latency (Dynamixel bus) and observation/action delay
 - [ ] Domain randomization (only after nominal physics is validated)
 - [ ] Policy export (ONNX) and inference timing
+  - [x] The animation policy in plain numpy, equal to its ONNX export within 3e-7; runs in
+        the 50 Hz loop with the loop under 1 ms late typically
 
 ### Phase 10 — Hardware deployment
 - [ ] Hardware control loop on the LEAP Hand API
+  - [x] A 50 Hz loop on our own driver (not public): scripted clips and the animation
+        policy in the shadow, guards and full logs (docs/real_hand.md, "How it was run")
 - [ ] Joint mapping and calibration
 - [ ] IMU integration
 - [ ] Safety limits and emergency stop
+  - [x] Stops at 40° of tilt, 15° from the simulation's prediction, a motor error, a silent
+        sensor, a motor at its limit for 1.5 s, or on request (lies down first)
 - [ ] Supported (suspended) first experiments
 - [ ] Incremental free-standing tests
+  - [x] Scripted: stand up, push-ups, sway, finger taps (docs/real_hand.md)
 - [ ] Real-world locomotion
+  - [x] A scripted, quasi-static crawl: 12+ cm in six cycles (one measurement)
 
 ## Milestone D — Release
 
