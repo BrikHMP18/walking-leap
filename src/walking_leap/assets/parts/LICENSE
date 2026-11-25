@@ -1,0 +1,14 @@
+foot_sock_finger.obj, foot_sock_thumb.obj
+
+  Copyright (c) 2026 Mathias Desrochers.
+  Adapted from the LEAP Hand V1 fingertip by its authors (https://v1.leaphand.com,
+  CC BY-SA 4.0). Changes: a rubber skin around the fingertip, reduced to a 64-point
+  convex hull, stretched as it is on the finger.
+  Licensed under Creative Commons Attribution-ShareAlike 4.0 International:
+  https://creativecommons.org/licenses/by-sa/4.0/
+
+imu_mount.stl
+
+  Copyright (c) 2026 Mathias Desrochers.
+  MIT, like the code of this repository (see LICENSE at its root). It bolts to the
+  LEAP Hand's back lid; nothing in it is taken from LEAP's CAD.

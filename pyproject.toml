@@ -4,7 +4,11 @@ version = "0.1.0"
 description = "Emergent finger locomotion for the LEAP Hand V1 with mjlab."
 readme = "README.md"
 license = "MIT"
-license-files = ["LICENSE", "src/walking_leap/assets/leap_hand/LICENSE"]
+license-files = [
+  "LICENSE",
+  "src/walking_leap/assets/leap_hand/LICENSE",
+  "src/walking_leap/assets/parts/LICENSE",
+]
 requires-python = ">=3.10,<3.14"
 dependencies = [
   "mjlab==1.6.1",
