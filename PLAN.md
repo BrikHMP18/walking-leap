@@ -87,6 +87,9 @@ training beyond PPO smoke tests and no hardware work until phase 5 is approved.
 ## Milestone B — Learning in simulation (not started; needs approval to train)
 
 ### Phase 5 — Standing and balance
+- [ ] Cluster training on Alliance Canada (Rorqual) with `cluster/train.sbatch`:
+      verify the driver supports CUDA 13.2, tests pass and H100 throughput in an
+      interactive job
 - [ ] Baseline run with the current config (fixed seed, logged metrics)
 - [ ] Investigate fingertip contact flicker at rest in MuJoCo Warp (~3 % of
       policy steps without contact; absent in CPU MuJoCo); decide whether contact

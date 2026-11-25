@@ -44,6 +44,9 @@ src/walking_leap/
   agent_cfg.py     PPO runner / network configuration
   mdp.py           The few MDP terms mjlab does not provide
   assets/leap_hand/  Unmodified MuJoCo Menagerie right_hand.xml + meshes (MIT)
+cluster/
+  env.sh           uv locations on Alliance Canada clusters (sourced by jobs)
+  train.sbatch     Slurm job: one training run (one per array task)
 tests/
   test_robot.py    Model structure and physics (plain MuJoCo, CPU)
   test_env.py      mjlab environment (GPU if available, else CPU)
@@ -99,6 +102,61 @@ uv run play Walking-Leap-Flat-v0 \
 
 Any config field can be overridden from the CLI (`--env.<field>`,
 `--agent.<field>`); see `uv run train Walking-Leap-Flat-v0 --help`.
+
+## Training on an Alliance Canada cluster
+
+`cluster/` holds what Slurm needs: `env.sh` (where uv puts Python, its cache
+and the virtualenv) and `train.sbatch` (a job script that calls mjlab's `train`
+unchanged). Written for Rorqual (`--gres=gpu:h100:1`); other clusters need
+their own GPU type there.
+
+- Code and runs stay in project space (a checkpoint is 1.4 MB). uv, Python and
+  the virtualenv (~6.5 GB, ~44k files) go to scratch: they are regenerable, and
+  the /project file quota is shared by the whole group. Scratch is purged after
+  inactivity; if a job fails at import, rerun `uv sync --frozen` on a login node.
+- torch in `uv.lock` is built for CUDA 13.2, so compute nodes need an NVIDIA
+  driver ≥ 580. Not yet verified on Rorqual: check `nvidia-smi` in the test job.
+
+One-time setup on a login node (login nodes have internet, compute nodes do
+not):
+
+```sh
+curl -LsSf https://astral.sh/uv/install.sh | sh
+cd ~/links/projects/<group>/$USER/repos        # your project space
+git clone git@github.com:BrikHMP18/walking-leap.git && cd walking-leap
+source cluster/env.sh && uv sync --frozen && mkdir -p logs/slurm
+echo 'export SBATCH_ACCOUNT=<account> SALLOC_ACCOUNT=<account>' >> ~/.bashrc  # e.g. def-<pi>_gpu
+```
+
+Before the first submission, check the environment in a short interactive job
+(open a new shell first so the account variables are set):
+
+```sh
+salloc --gres=gpu:h100:1 --cpus-per-task=4 --mem=16G --time=0:30:00
+source cluster/env.sh && export UV_OFFLINE=1
+nvidia-smi                       # driver >= 580
+uv run --frozen pytest
+uv run --frozen train Walking-Leap-Flat-v0 --env.scene.num-envs 4096 --agent.max-iterations 30
+exit
+```
+
+Submit from the repository root and follow the job:
+
+```sh
+sbatch cluster/train.sbatch               # one run, seed 42
+sbatch --array=0-2 cluster/train.sbatch   # seeds 42, 43, 44
+squeue -u $USER
+tail -f logs/slurm/walking-leap-<job id>.out
+```
+
+Arguments after the script go to `train`. If a node fails, resubmit with
+`--agent.resume True --agent.load-run <run directory>` to continue from that
+run's latest checkpoint. Copy runs back to view them locally (TensorBoard,
+`play`):
+
+```sh
+rsync -av <cluster>:<repository path>/logs/rsl_rl/ logs/rsl_rl/
+```
 
 ## Tests
 
