@@ -8,7 +8,9 @@ speed and losing its balance; only physics says whether it can be done.
 
 The real hand's scripted clips (docs/data/real_clips/, joint targets that ran open
 loop on the hand) become motions too: ``replay`` plays them open loop in plain MuJoCo
-on the real hand's model, and the palm follows from physics.
+on the real hand's model, and the palm follows from physics. So does ``gait``: the
+scripted crawl of ``gait.py`` (one cycle per command, 150 random commands), the
+reference of the gait task.
 
   uv run python -m walking_leap.clips          # rebuild assets/clips/*.npz and report
 """
@@ -412,6 +414,19 @@ def main() -> None:
     save(motion, hand, CLIPS_DIR / f"{name}.npz")
     moved = 1e3 * (motion.qpos[-1, :2] - motion.qpos[0, :2])
     print(name, {"frames": len(motion.qpos), "moved_mm": moved.round(1).tolist()})
+  write_gait(hand)
+
+
+def write_gait(hand: RealHand) -> Motion:
+  """assets/clips/gait.npz: the scripted crawl's targets (``gait.training_targets``)
+  replayed on the real hand's model."""
+  from walking_leap import gait
+
+  motion = replay("gait", hand, q=gait.training_targets(hand.model))
+  save(motion, hand, CLIPS_DIR / "gait.npz")
+  moved = 1e3 * (motion.qpos[-1, :2] - motion.qpos[0, :2])
+  print("gait", {"frames": len(motion.qpos), "moved_mm": moved.round(1).tolist()})
+  return motion
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ environment's physics options and its action pipeline
 (target = clip(nominal + ACTION_SCALE * action, joint limits)). No policy is
 involved. Run from the repository root:
 
-  uv run python docs/render_media.py
+  uv run python scripts/render_media.py
 """
 
 from pathlib import Path
@@ -19,7 +19,7 @@ from walking_leap import robot
 from walking_leap.clips import CLIPS_DIR
 from walking_leap.env_cfg import ACTION_SCALE, walking_leap_flat_env_cfg
 
-OUT = Path(__file__).parent / "media"
+OUT = Path(__file__).parents[1] / "docs" / "media"
 FPS = 15
 GIF_SIZE = (240, 320)  # (height, width)
 

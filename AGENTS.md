@@ -88,7 +88,7 @@ maintainer's explicit approval.
 Before every commit:
 
 ```sh
-uv run ruff check src tests docs && uv run ruff format --check src tests docs
+uv run ruff check src tests scripts && uv run ruff format --check src tests scripts
 uv run pytest
 uv run train Walking-Leap-Flat-v0 --env.scene.num-envs 512 --agent.max-iterations 10  # if env/agent changed
 ```
@@ -97,7 +97,7 @@ uv run train Walking-Leap-Flat-v0 --env.scene.num-envs 512 --agent.max-iteration
   MuJoCo, CPU). New MDP terms need coverage in `tests/test_env.py`.
 - Tests must pass on CPU (`CUDA_VISIBLE_DEVICES=""`), not only on a GPU.
 - If a change alters what the hand looks like or does at rest, regenerate the
-  README media with `uv run python docs/render_media.py`.
+  README media with `uv run python scripts/render_media.py`.
 
 ## Experimental validation
 

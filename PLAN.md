@@ -72,7 +72,7 @@ The trainings below that are checked come from a branch, not from this milestone
   - [x] 4096 envs fit on an 8 GB GPU (~51k env-steps/s, RTX 5060 Laptop)
 
 ### Phase 4 — Documentation of the foundation
-- [x] README media rendered reproducibly (`docs/render_media.py`)
+- [x] README media rendered reproducibly (`scripts/render_media.py`)
   - [x] Nominal pose, three views, palm frame and contact points
   - [x] Zero-action standing GIF
   - [x] Joint-sweep GIF (actuation)
@@ -167,6 +167,18 @@ The trainings below that are checked come from a branch, not from this milestone
   - [ ] Real hand: shadow, then driving
 - [ ] Steerable imitation: turning crawl clips (and one where the thumb steps,
       as in `taps`), one policy for all of them, the keyboard picking the next cycle
+  - [x] A scripted crawl, one cycle per command (forward, back, left, right, turns,
+        stand), cycles chaining in any order (`gait.py`); each command's clip and a
+        12-command mix stayed up on 45 of 45 random simulated hands
+        (`scripts/gait_clips.py`); planned steps checked by
+        `test_gait_commands_move_the_plan`
+  - [x] `Walking-Leap-Motion-Gait-Flat-v0`: imitate 150 random cycles of it, with the
+        IMU, nothing random (`test_gait_file_is_up_to_date`,
+        `test_crawl_as_targets_stays_close[...Gait...]`); 10-iteration smoke run
+  - [ ] Train it, 2 seeds; then randomization and pushes; then getting up after a
+        fall, in the same policy (falls no longer end an episode)
+  - [ ] The physics replay moves less than planned: right about 2 mm a cycle (8
+        planned), back 7 (20), turns 4-7 deg (20); forward drifts left 8 mm a cycle
 - [ ] Keyboard teleoperation of the velocity command in `play`
 
 ### Phase 8 — Robustness

@@ -72,3 +72,15 @@ for variant, imu in (("", True), ("-NoImu", False)):
     rl_cfg=walking_leap_crawl_ppo_runner_cfg(),
     runner_cls=MotionTrackingOnPolicyRunner,
   )
+
+# Imitating the scripted crawl of gait.py (assets/clips/gait.npz: one cycle per command,
+# forward, back, left, right, turns and stand, 150 of them at random), on the real
+# hand with the palm IMU, nothing random yet.
+gait_hand = dict(clip="gait", feet=False, stiffness=MEASURED_STIFFNESS, torsion=TORSION)
+register_mjlab_task(
+  task_id="Walking-Leap-Motion-Gait-Flat-v0",
+  env_cfg=walking_leap_motion_env_cfg(**gait_hand),
+  play_env_cfg=walking_leap_motion_env_cfg(play=True, **gait_hand),
+  rl_cfg=walking_leap_crawl_ppo_runner_cfg(),
+  runner_cls=MotionTrackingOnPolicyRunner,
+)

@@ -7,7 +7,7 @@ import torch
 from mjlab.envs import ManagerBasedRlEnv
 from mjlab.tasks.registry import list_tasks, load_env_cfg
 
-from walking_leap import clips, mdp, robot
+from walking_leap import clips, gait, mdp, robot
 from walking_leap.motion_cfg import (
   CABLE_BODIES,
   CABLE_FORCE,
@@ -178,6 +178,7 @@ def test_play_has_no_disturbance():
 
 CRAWL_TASK = "Walking-Leap-Motion-Crawl-Flat-v0"
 CRAWL_NO_IMU_TASK = "Walking-Leap-Motion-Crawl-Flat-NoImu-v0"
+GAIT_TASK = "Walking-Leap-Motion-Gait-Flat-v0"
 
 
 def test_crawl_file_is_up_to_date():
@@ -208,9 +209,10 @@ def test_crawl_tasks_track_the_digits_last_links():
     assert hand.init_state.pos[2] == robot.FOLDED_ROOT_HEIGHT_STOCK
 
 
-def test_crawl_as_targets_stays_close():
-  """5 s of the crawl's joints as targets, no learning: near the reference."""
-  cfg = load_env_cfg(CRAWL_TASK, play=True)
+@pytest.mark.parametrize("task", [CRAWL_TASK, GAIT_TASK])
+def test_crawl_as_targets_stays_close(task):
+  """5 s of the clip's joints as targets, no learning: near the reference."""
+  cfg = load_env_cfg(task, play=True)
   cfg.scene.num_envs = NUM_ENVS
   cfg.seed = 0
   env = ManagerBasedRlEnv(cfg, device=DEVICE)
@@ -227,3 +229,53 @@ def test_crawl_as_targets_stays_close():
     assert worst < 0.02
   finally:
     env.close()
+
+
+##
+# The scripted crawl of gait.py, one cycle per command.
+##
+
+
+@pytest.fixture(scope="module")
+def crawler():
+  return gait.Crawler(clips.RealHand().model, thumb_drag=True)
+
+
+@pytest.mark.parametrize(
+  "name", ["forward", "back", "left", "right", "turn_left", "turn_right"]
+)
+def test_gait_commands_move_the_plan(crawler, name):
+  """Planned (kinematics), each command moves the hand by about its step a cycle."""
+  q = crawler.start.copy()
+  _, q = crawler.cycle(q, np.zeros(3), drag_s=gait.FIRST_DRAG_S)
+  d = crawler.ik.kin(q)
+  com0, yaw0 = d.subtree_com[crawler.palm][:2].copy(), crawler.heading(d)
+  for _ in range(3):
+    _, q = crawler.cycle(q, np.array(gait.GAIT_COMMANDS[name]))
+  d = crawler.ik.kin(q)
+  moved = crawler.rot(-yaw0) @ (d.subtree_com[crawler.palm][:2] - com0) / 3
+  turned = (crawler.heading(d) - yaw0) / 3
+  forward, left, turn = gait.GAIT_COMMANDS[name]
+  assert abs(moved[0] - forward) < 0.005 and abs(moved[1] - left) < 0.005
+  assert abs(turned - turn) < np.radians(2.0)
+
+
+def test_gait_file_is_up_to_date():
+  """assets/clips/gait.npz is gait.py's crawl replayed on the real hand's model, and
+  the hand stays up for all of it."""
+  hand = clips.RealHand()
+  motion = clips.replay("gait", hand, q=gait.training_targets(hand.model))
+  saved = np.load(clips.CLIPS_DIR / "gait.npz")
+  assert saved["fps"][0] == clips.FPS and len(saved["joint_pos"]) == len(motion.qpos)
+  assert np.allclose(saved["joint_pos"], motion.qpos[:, 7:], atol=2e-3)
+  palm = saved["body_pos_w"][:, 0]
+  assert palm[:, 2].min() > 0.10  # the palm stays up (it starts at 0.13 m)
+  w, x, y, z = saved["body_quat_w"][:, 0].T
+  assert (1 - 2 * (x * x + y * y)).min() > np.cos(np.radians(15.0))  # tilt < 15 deg
+
+
+def test_gait_task_sees_the_imu():
+  cfg = load_env_cfg(GAIT_TASK)
+  assert cfg.commands["motion"].motion_file.endswith("gait.npz")
+  actor = list(cfg.observations["actor"].terms)
+  assert "base_ang_vel" in actor and "projected_gravity" in actor

@@ -45,7 +45,10 @@ the real hand and what to train next).
   fingertip-sliding penalty (`Walking-Leap-Flat-v1`, `-NoImu-v1`) on the nominal
   model, and walking from rewards only on the real hand's model, with and without
   the IMU (`Walking-Leap-Flat-v3`, `-NoImu-v3`; queued on Rorqual, jobs 27680032
-  and 27680033).
+  and 27680033). And imitating a steerable scripted crawl with the IMU
+  (`Walking-Leap-Motion-Gait-Flat-v0`): one cycle per command from the planner in
+  `gait.py`; each command's clip and a mixed one stayed up on 45 of 45 random
+  simulated hands (`scripts/gait_clips.py`); smoke-tested only (10 iterations).
 
 What the next training batch should change, from all of it:
 [docs/next_training.md](docs/next_training.md). See [PLAN.md](PLAN.md).
@@ -54,7 +57,7 @@ What the next training batch should change, from all of it:
 | :---: | :---: | :---: |
 | ![zero action](docs/media/zero_action.gif) | ![joint sweep](docs/media/joint_sweep.gif) | ![random actions](docs/media/random_actions.gif) |
 
-All media but the real hand's (`docs/media/real_*.png`, `standup_sim.png`: from logs) are rendered by [`docs/render_media.py`](docs/render_media.py) with
+All media but the real hand's (`docs/media/real_*.png`, `standup_sim.png`: from logs) are rendered by [`scripts/render_media.py`](scripts/render_media.py) with
 the same model, physics options and action mapping as the environment.
 
 ## Technical stack
@@ -79,6 +82,7 @@ src/walking_leap/
   clips.py         The animations, written as keyframes and solved with planted feet
   agent_cfg.py     PPO runner / network configuration
   mdp.py           The few MDP terms mjlab does not provide
+  gait.py          The scripted four-digit crawl: servo targets, one cycle per command
   assets/leap_hand/  Unmodified MuJoCo Menagerie right_hand.xml + meshes (MIT)
   assets/parts/    Feet, IMU cover and pad (see "As-built hand"; licences inside)
   assets/clips/    Solved animations, written by clips.py
@@ -91,14 +95,16 @@ tests/
   test_env.py      mjlab walking environment (GPU if available, else CPU)
   test_motion.py   Animations and the motion-imitation environment
 docs/
-  render_media.py  Renders the README images/GIFs into docs/media/
   real_hand.md     The first runs on the real hand: what ran, sim against real
   handoff.md       Start here: what this branch adds, how to run it, what to train next
   next_training.md What the next training batch should change, and why
+  rl_notes.md      Notes: the networks' inputs and outputs, PPO and its alternatives
   data/real_clips/ The joint targets the real hand played (50 Hz, with the sim's IMU reading)
 hardware/          The printed parts, latest versions: IMU mount, foot socks (STL, STEP, licences)
 scripts/
   scripted_gaits.py    Scripted gaits, no learning: the keyboard-steered crawl, two-digit trials
+  gait_clips.py        The crawl's clip per command, tested on 45 random simulated hands
+  render_media.py      Renders the README images/GIFs into docs/media/
   crawl_loop.py        A 40-cycle crawl clip, to watch a crawl policy keep going
 PLAN.md            Roadmap and verified progress
 AGENTS.md          Conventions for contributors and coding agents
@@ -138,6 +144,7 @@ and reward terms; motion tasks use the as-built hand, see "Animations"):
 | `Walking-Leap-Flat-NoImu-v3` | as v3 | 51: encoders only |
 | `Walking-Leap-Motion-Crawl-Flat-v0` | real hand, imitate the real crawl (3 cycles, 28 s), nothing random | 89: encoders + palm IMU + the reference |
 | `Walking-Leap-Motion-Crawl-Flat-NoImu-v0` | as Crawl-v0 | 83: encoders + the reference |
+| `Walking-Leap-Motion-Gait-Flat-v0` | real hand, imitate the scripted crawl of `gait.py`: cycles of forward 30 mm, back 20, left 15, right 8, turns 20°, stand, 150 at random (159 s); nothing random | 89: encoders + palm IMU + the reference |
 
 Visualize the environment without a policy (`--viewer native` opens a MuJoCo
 window; `--viewer viser` serves a web viewer at http://localhost:8080):
@@ -367,10 +374,10 @@ rsync -av <cluster>:<repository path>/logs/rsl_rl/ logs/rsl_rl/
 ## Tests
 
 ```sh
-uv run pytest                              # 54 tests: 26 robot/physics, 28 clips and environments
-CUDA_VISIBLE_DEVICES="" uv run pytest      # CPU only (~45 s)
-uv run ruff check src tests docs && uv run ruff format --check src tests docs
-uv run python docs/render_media.py         # regenerate docs/media/
+uv run pytest                              # 63 tests: 26 robot/physics, 37 clips and environments
+CUDA_VISIBLE_DEVICES="" uv run pytest      # CPU only (~2.5 min)
+uv run ruff check src tests scripts && uv run ruff format --check src tests scripts
+uv run python scripts/render_media.py      # regenerate docs/media/
 ```
 
 ## Design
