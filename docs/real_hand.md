@@ -155,12 +155,11 @@ palm's tilt drifts more than 3° from the real IMU on average (1.5° now).
 ## How it was run
 
 A 50 Hz loop on the computer the hand is plugged into, in plain Python: it reads the
-motors (100 Hz, through our driver, which is not public) and the IMU (400 Hz), sends
+motors (100 Hz, through the driver in `real/leap_hand/`) and the IMU (400 Hz), sends
 one target per tick, and stops on its own at 40° of tilt, 15° away from what the
 simulation predicted for that moment, a motor error, a silent sensor, a motor at its
 current limit for 1.5 s, or a stop request (then it lies down first). It logs every
 motor state, every IMU reading and every command. The same loop also runs the
 animation policies of this repo (`Walking-Leap-Motion-*`), exported to plain numpy
-and checked against the ONNX export (largest difference 3e-7). The loop and the
-simulation tools around it are kept outside this repository for now, because the
-loop imports the private driver.
+and checked against the ONNX export (largest difference 3e-7). The loop, its driver
+and the control panel are in [`real/`](../real/README.md).
