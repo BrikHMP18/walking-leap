@@ -1,8 +1,10 @@
 # The real hand: control loop and deployment
 
 The loop that has run the real hand: scripted clips and trained animation policies, with
-its guards and full logs. Also the IMU's reader and the tool that turns a trained policy
-into a file the loop runs. What it has done so far: [`docs/real_hand.md`](../docs/real_hand.md).
+its guards and full logs; a control panel on top of it (a web page: keys to move, emotes,
+a live 3D view); the IMU's reader; the tool that turns a trained policy into a file the
+loop runs; a simulated hand to try all of it without hardware. What the real hand has done
+so far: [`docs/real_hand.md`](../docs/real_hand.md).
 
 ```text
 real/
@@ -11,8 +13,12 @@ real/
   wlc.py             the loop: Hand (the only class that talks to the motors), Recorder, Clip, Control, run()
   policy.py          an animation policy in plain numpy (89 inputs, or 83 without IMU), and a velocity one
   export_policy.py   a checkpoint (+ its ONNX) -> outputs/real/policies/<run>.npz
+  panel/             the control panel: server.py, run, static/ (the page, the hand's 3D model)
+  twin.py            the loop driving a simulated hand instead of the motors (MuJoCo, CPU)
+  make_clip.py       a clips.py motion file -> a clip the loop plays (real/clips/)
+  clips/             the panel's moves (one cycle each) and emotes: planned, not yet played on the hand
   imu/               the TM171's reader (tm171.py, standard library only) and `wlimu`, see imu/README.md
-docs/data/real_clips/  the clips the loop plays (joint targets at 50 Hz, what the sim's IMU read)
+docs/data/real_clips/  the clips the real hand played (joint targets at 50 Hz, what the sim's IMU read)
 outputs/real/          policies/, logs/, imu/ (git-ignored)
 ```
 
@@ -70,6 +76,56 @@ the `--fake` run, clean. **Not tried yet with the hand plugged into a laptop.**
    close it after). Then the scripts or a policy as below. At the end of every run the
    loop says how late it ran: on the hand's PC typically under 1 ms; keep the laptop on
    its charger.
+
+## The control panel
+
+A page in the browser that drives the hand through this loop, with every guard below.
+
+```sh
+real/panel/run                               # the real hand (on the hand's PC, Mathias there)
+real/panel/run --fake                        # the driver's fake motors and a level IMU
+uv run python real/panel/server.py --twin    # a simulated hand, anywhere the repo runs
+```
+
+Then open http://localhost:8765 (from a laptop: `ssh -L 8765:localhost:8765 <hand PC>`
+first; it listens on that computer only). The page loads three.js from a CDN.
+
+- **Connect** turns the torque on, lying; **Stand up**, then the moves and emotes, then
+  **Lie down** or **Disconnect** (lies down if needed, then torque off).
+- **Move, W A S D Q E** (the keyboard or the buttons): one crawl cycle each, about 10 s.
+  W and S forward and back (23 mm planned), A and D sideways (8 mm), Q and E turn on the
+  spot (10°). Up to 4 wait in a queue; the hand holds its stance between them.
+- **Emotes:** bow, push-ups, sway, taps, hello, the dead crawl, the happy crawl, three
+  crawl cycles. Each starts and ends on the stand.
+- **Policy:** the dropdown lists `outputs/real/policies/`. A green dot marks the moves and
+  emotes it drives; the rest play as written. Shadow (computed and logged) or Live (its
+  targets go to the motors; on the real hand it asks first).
+- **Live view:** the hand as measured (encoders and the IMU's tilt) and, translucent, as
+  the clip says it should be, each standing on the floor. Below it: tilt, the IMU against
+  the plan, the policy against the clip, how late the loop runs, motor temperatures.
+- **Supposed position:** where the hand should be on the table, from the moves' planned
+  paths (no sensor measures it), restarting where it stood up; the gyro's heading in
+  orange; with the twin, where the simulated hand really is (dashed).
+- **STOP** or **Esc:** lies down (if it can), then torque off. The power switch is still
+  the emergency stop.
+
+**What a move does depends on the policy.** In the twin, open loop (no policy), W goes
+31 mm where 23 are planned, S 10 of 23, and the turns lean right; all six stay up on 45
+random simulated hands. The steering policy (W S Q E) corrected that in the earlier tests;
+A and D aren't in any trained policy yet. None of the moves or the new emotes has run on
+the real hand.
+
+Policies for it, exported with `--tracker` (one policy, several clips):
+
+```sh
+uv run python real/export_policy.py <run>/model_5999.pt --tracker   --clips step_forward step_back turn_left turn_right --onnx <run>/<run>.onnx --out outputs/real/policies/steering.npz
+```
+
+The moves were written with the `clips.py` of PR #1's branch, not merged yet (`crawl`,
+`backwards`, `turn`, and a sideways crawl:
+the turn's cycle with a shift instead of a turn, the leading finger first, 8 mm a cycle;
+at 10 mm the step right leaves under 3 mm of balance margin), then `make_clip.py`. The 3D
+model is `panel/make_model.py`'s (re-run it if the hand's model changes; a test checks).
 
 ## Rules, every run
 

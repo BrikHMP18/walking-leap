@@ -27,7 +27,12 @@ sys.path.insert(0, HERE + "/imu")
 # The driver's settings for this hand (its limits, the 350 mA, the watchdog); the gains are set below.
 RIG = os.environ.get("WL_RIG", os.path.expanduser("~/dexhw/rigs/leap_right.yaml"))
 STOP = HERE + "/STOP"
-CLIPS = os.environ.get("WL_CLIPS", REPO + "/docs/data/real_clips")
+# Where clips are looked for, in order: the panel's moves and emotes, then the ones the real
+# hand has played (WL_CLIPS: one more folder, looked in first).
+CLIP_DIRS = [HERE + "/clips", REPO + "/docs/data/real_clips"]
+if os.environ.get("WL_CLIPS"):
+  CLIP_DIRS.insert(0, os.environ["WL_CLIPS"])
+CLIPS = CLIP_DIRS[-1]
 LOGS = os.environ.get("WL_LOGS", REPO + "/outputs/real/logs")
 POLICIES = os.environ.get("WL_POLICIES", REPO + "/outputs/real/policies")
 HZ = 50
@@ -237,11 +242,34 @@ class Recorder:
 
 
 # ---------------------------------------------------------------------------- clips
+def clip_path(name):
+  if name.endswith(".npz"):
+    return name
+  for folder in CLIP_DIRS:
+    if os.path.exists(f"{folder}/{name}.npz"):
+      return f"{folder}/{name}.npz"
+  raise FileNotFoundError(f"no clip {name} in {CLIP_DIRS}")
+
+
+def clip_names():
+  """Every clip the loop can find, the first of each name."""
+  seen = {}
+  for folder in CLIP_DIRS:
+    for f in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+      if f.endswith(".npz"):
+        seen.setdefault(f[:-4], f"{folder}/{f}")
+  return seen
+
+
 class Clip:
-  """Joint targets at 50 Hz, with what the sim's IMU read for them."""
+  """Joint targets at 50 Hz, with what the sim's IMU read (or the plan's palm) for them.
+
+  Optional: ``palm``, the planned palm path (frames x 3: x, y in m along the start's
+  axes, heading in rad), for the panel's map.
+  """
 
   def __init__(self, name):
-    path = name if name.endswith(".npz") else f"{CLIPS}/{name}.npz"
+    path = clip_path(name)
     d = np.load(path, allow_pickle=False)
     self.name = os.path.basename(path)[:-4]
     self.q, self.grav = d["q"].astype(float), d["grav"].astype(float)
@@ -252,6 +280,7 @@ class Clip:
     v = np.abs(np.diff(self.q, axis=0)).max() * HZ if len(self.q) > 1 else 0
     assert v < 6.0, f"{name}: {v:.1f} rad/s between two frames"
     self.start, self.end = self.meta["start"], self.meta["end"]
+    self.palm = d["palm"].astype(float) if "palm" in d else None
     self.sha = hashlib.sha256(open(path, "rb").read()).hexdigest()[:12]
 
 
@@ -274,6 +303,11 @@ class Control:
     self.policy, self.live = None, False
     self.worst_off = 0.0
     self.clip_no = -1
+    self.on_tick = (
+      None  # called after every tick with what was sent and read (the panel)
+    )
+    self.stop_asked = None  # a reason: lie down at the next tick (the panel's STOP)
+    self.keep_policy = False  # clips back to back: the policy keeps its last action
 
   def guard(self, pred):
     s, q, dq, cur, qc = self.hand.read()
@@ -301,9 +335,12 @@ class Control:
     if os.path.exists(STOP):
       os.remove(STOP)
       raise SoftStop("STOP file")
+    if self.stop_asked:
+      why, self.stop_asked = self.stop_asked, None
+      raise SoftStop(why)
     return s, q, dq, cur, g
 
-  def step(self, target, pred=None, clip=-1, frame=-1, policy_q=None):
+  def step(self, target, pred=None, clip=-1, frame=-1, policy_q=None, clip_q=None):
     """Send one target, wait for the 50 Hz tick, check everything."""
     now = time.monotonic()
     if self.next is None or now - self.next > 0.5:
@@ -317,7 +354,7 @@ class Control:
         clip,
         frame,
         self.q,
-        target,
+        target if clip_q is None else clip_q,
         nan3 if pred is None else pred,
         nan16 if policy_q is None else policy_q,
         late,
@@ -325,7 +362,14 @@ class Control:
     )
     self.next += 1 / HZ
     time.sleep(max(0.0, self.next - time.monotonic()))
-    return self.guard(pred)
+    read = self.guard(pred)
+    if self.on_tick is not None:
+      s, q, dq, cur, g = read
+      self.on_tick(
+        dict(sent=self.q, clip_q=target if clip_q is None else clip_q, pred=pred,
+             frame=frame, policy_q=policy_q, q=q, cur=cur, g=g, late=late)
+      )  # fmt: skip
+    return read
 
   def start(self):
     s, q, *_ = self.hand.read()
@@ -358,12 +402,12 @@ class Control:
       if (
         self.policy is not None
         and self.policy.clip is not None
-        and clip.name.startswith(self.policy.clip)
+        and self.policy.covers(clip.name)
       )
       else None
     )
     if policy is not None:
-      policy.reset(clip)
+      policy.reset(clip, keep_last=self.keep_policy)
     pol = []
     n = len(clip.q) if speed == 1.0 else int((len(clip.q) - 1) / speed) + 1
     self.where = "moving"
@@ -379,7 +423,10 @@ class Control:
         pol.append(np.abs(pq - tgt))
         if self.live:
           tgt = pq
-      self.step(tgt, clip.grav[i] if speed == 1.0 else None, self.clip_no, i, pq)
+      clip_q = clip.q[i] + (clip.q[j] - clip.q[i]) * (x - i)
+      self.step(
+        tgt, clip.grav[i] if speed == 1.0 else None, self.clip_no, i, pq, clip_q
+      )
     self.where = clip.end
     cur = np.array([r[33:49] for r in self.rec.m[n0:]])
     g = self.imu.latest.gravity

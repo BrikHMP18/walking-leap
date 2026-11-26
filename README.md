@@ -106,6 +106,7 @@ tests/
   test_real_runs.py The real hand's recordings, and the simulator replaying one against them
   test_real_loop.py The real hand's loop: clips, policy inputs in the task's order
   test_tm171.py    The IMU's reader, without the IMU
+  test_panel.py    The control panel: its clips, its 3D model, a session on the twin
 docs/
   real_hand.md     The first runs on the real hand: what ran, sim against real
   handoff.md       Start here: what this branch adds, how to run it, what to train next
@@ -114,7 +115,7 @@ docs/
   data/real_clips/ The joint targets the real hand played (50 Hz, with the sim's IMU reading)
   data/real_runs/  What the real hand recorded in six runs: motors, IMU and the targets sent
 hardware/          The printed parts, latest versions: IMU mount, foot socks (STL, STEP, licences)
-real/              The real hand's control loop, the IMU's reader, a policy's export: start at real/README.md
+real/              The real hand's control loop and its control panel, the IMU's reader, a policy's export, the twin: start at real/README.md
 scripts/
   scripted_gaits.py    Scripted gaits, no learning: the keyboard-steered crawl, two-digit trials
   gait_clips.py        The crawl's clip per command, tested on 45 random simulated hands

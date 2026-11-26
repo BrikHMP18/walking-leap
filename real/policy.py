@@ -47,7 +47,9 @@ class MotionPolicy:
     assert self.mean.size in (83, 89), (
       f"{self.mean.size} inputs: not a Walking-Leap-Motion policy"
     )
-    # The clip it was trained on: it only runs while that clip plays.
+    # The clips it may play: it runs only while one of them plays. Older files name one
+    # clip, which covers the clips whose names start with it.
+    self.clips = [str(c) for c in d["clips"]] if "clips" in d.files else None
     self.clip = str(d["clip"]) if "clip" in d.files else "hello"
     # The reference it saw in training (from the task's motion file). Without it, the loop's clip.
     self.ref = (
@@ -57,8 +59,13 @@ class MotionPolicy:
     )
     self.last = np.zeros(16)
 
-  def reset(self, clip):
-    self.last = np.zeros(16)
+  def covers(self, name):
+    return name in self.clips if self.clips is not None else name.startswith(self.clip)
+
+  def reset(self, clip, keep_last=False):
+    """At a clip's start. ``keep_last``: clips back to back, as in a training library."""
+    if not keep_last:
+      self.last = np.zeros(16)
     if self.ref is not None:
       self.q, self.dq, self.g = self.ref
     else:
