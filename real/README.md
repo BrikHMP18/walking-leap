@@ -29,6 +29,48 @@ outputs/real/          policies/, logs/, imu/ (git-ignored)
   (`WL_PYTHON` to choose another Python). Gains 1200/0/600 by default.
 - The policy runs in numpy on that PC's CPU, 50 times a second. No torch, no GPU there.
 
+## Running it from your own laptop
+
+Any Linux x86-64 PC with Python 3.10 or newer: the loop needs numpy and the hand's driver,
+no GPU. Tried from scratch on a lab PC (Ubuntu, Python 3.12, uv): the steps below up to
+the `--fake` run, clean. **Not tried yet with the hand plugged into a laptop.**
+
+1. The repo as usual (`uv sync`): it's what `export_policy.py` and the tests run in.
+2. The driver: dexhw isn't public, get a copy from Mathias (a folder with `pyproject.toml`
+   and `rigs/leap_right.yaml`).
+3. A Python for the loop, apart from the repo's (the paths are examples):
+
+   ```sh
+   uv venv ~/.venvs/leap-hand --python 3.12
+   uv pip install --python ~/.venvs/leap-hand/bin/python numpy /path/to/dexhw
+   export WL_PYTHON=~/.venvs/leap-hand/bin/python             # in your shell's rc
+   export WL_RIG=/path/to/dexhw/rigs/leap_right.yaml
+   ```
+
+4. Without the hand: `real/wl play stand_up crawl lie_down --policy <run> --fake` must end
+   with `torque off. OK`.
+5. The ports, once. Your user in `dialout` (the U2D2 and the IMU), and the U2D2's USB
+   latency at 1 ms instead of the kernel's 16 (the driver reads 16 motors 100 times a
+   second):
+
+   ```sh
+   sudo usermod -aG dialout $USER        # then log out and in
+   echo 'SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6014", ENV{ID_MM_DEVICE_IGNORE}="1", ATTR{device/latency_timer}="1"' \
+     | sudo tee /etc/udev/rules.d/99-leap-u2d2.rules
+   sudo udevadm control --reload-rules && sudo udevadm trigger
+   cat /sys/bus/usb-serial/devices/ttyUSB*/latency_timer   # with the U2D2 plugged: 1
+   ```
+
+   The rig finds the U2D2 by its serial number (`/dev/serial/by-id/`), and `tm171.py` finds
+   the IMU by its name, so nothing else changes from one PC to another.
+6. The first time on the hand, with Mathias, nothing moving: the U2D2 and the IMU
+   unplugged from the other PC and into yours, the hand powered, then
+   `$WL_PYTHON /path/to/dexhw/scripts/leap_scan.py --rig $WL_RIG` (read only: all 16
+   answer, torque off) and `real/imu/wlimu check` (400 readings a second, none lost;
+   close it after). Then the scripts or a policy as below. At the end of every run the
+   loop says how late it ran: on the hand's PC typically under 1 ms; keep the laptop on
+   its charger.
+
 ## Rules, every run
 
 1. **Mathias' go, and somebody at the power switch.** The hand is shared with another
