@@ -45,10 +45,17 @@ the real hand and what to train next).
   fingertip-sliding penalty (`Walking-Leap-Flat-v1`, `-NoImu-v1`) on the nominal
   model, and walking from rewards only on the real hand's model, with and without
   the IMU (`Walking-Leap-Flat-v3`, `-NoImu-v3`; queued on Rorqual, jobs 27680032
-  and 27680033). And imitating a steerable scripted crawl with the IMU
+  and 27680033). `Walking-Leap-Motion-Gait-Flat-v1` adds randomization, pushes and
+  falls that do not end the episode to the scripted crawl below (the clip waits and
+  resumes where the hand gets up); smoke-tested only.
+- **Imitating a steerable scripted crawl** with the IMU
   (`Walking-Leap-Motion-Gait-Flat-v0`): one cycle per command from the planner in
   `gait.py`; each command's clip and a mixed one stayed up on 45 of 45 random
-  simulated hands (`scripts/gait_clips.py`); smoke-tested only (10 iterations).
+  simulated hands (`scripts/gait_clips.py`). Trained on Modal (one seed, 3000
+  iterations, W&B `pmh0h1vl`); in the training log (iterations 2958-2999) the palm
+  stays 8.5 mm and 4.1° from the clip, episodes last 499.4 of 500 steps, no falls.
+  Not yet evaluated outside training; it follows the clip's commands, not the
+  keyboard yet.
 
 What the next training batch should change, from all of it:
 [docs/next_training.md](docs/next_training.md). See [PLAN.md](PLAN.md).
@@ -89,6 +96,7 @@ src/walking_leap/
 cluster/
   env.sh           uv locations on Alliance Canada clusters (sourced by jobs)
   train.sbatch     Slurm job: one training run (one per array task)
+  modal_train.py   The same run on a Modal H100 (W&B online, checkpoints to Hugging Face)
 tests/
   test_robot.py    Model structure and physics (plain MuJoCo, CPU)
   test_as_built.py The same for the hand with its parts
@@ -104,6 +112,7 @@ hardware/          The printed parts, latest versions: IMU mount, foot socks (ST
 scripts/
   scripted_gaits.py    Scripted gaits, no learning: the keyboard-steered crawl, two-digit trials
   gait_clips.py        The crawl's clip per command, tested on 45 random simulated hands
+  getup_check.py       Which falls the hand can get up from (open-loop search)
   render_media.py      Renders the README images/GIFs into docs/media/
   eval_velocity.py     Fixed velocity commands: how far each policy goes, or watch one
 PLAN.md            Roadmap and verified progress
@@ -145,6 +154,7 @@ and reward terms; motion tasks use the as-built hand, see "Animations"):
 | `Walking-Leap-Motion-Crawl-Flat-v0` | real hand, imitate the real crawl (3 cycles, 28 s), nothing random | 89: encoders + palm IMU + the reference |
 | `Walking-Leap-Motion-Crawl-Flat-NoImu-v0` | as Crawl-v0 | 83: encoders + the reference |
 | `Walking-Leap-Motion-Gait-Flat-v0` | real hand, imitate the scripted crawl of `gait.py`: cycles of forward 30 mm, back 20, left 15, right 8, turns 20°, stand, 150 at random (159 s); nothing random | 89: encoders + palm IMU + the reference |
+| `Walking-Leap-Motion-Gait-Flat-v1` | as Gait-v0, with everything random of Motion-v1, pushes, cables and falls: a fall no longer ends the episode, the clip waits and resumes where the hand gets up, a fifth of the episodes start fallen (57-115° tilt); rewards for an upright palm and for moving as planned | 89 (as v0: it can continue v0's checkpoints) |
 
 Visualize the environment without a policy (`--viewer native` opens a MuJoCo
 window; `--viewer viser` serves a web viewer at http://localhost:8080):
@@ -242,6 +252,7 @@ offset) and the reference motion at that frame.
 | crawl, with IMU, seed 43 | [model_2999.pt](https://huggingface.co/Autobrik/walking-leap/resolve/main/runs/2026-11-26_01-55-17_Walking-Leap-Motion-Crawl-Flat-v0_s43/model_2999.pt) | [.onnx](https://huggingface.co/Autobrik/walking-leap/resolve/main/runs/2026-11-26_01-55-17_Walking-Leap-Motion-Crawl-Flat-v0_s43/2026-11-26_01-55-17_Walking-Leap-Motion-Crawl-Flat-v0_s43.onnx) |
 | crawl, no IMU, seed 42 | [model_2999.pt](https://huggingface.co/Autobrik/walking-leap/resolve/main/runs/2026-11-26_03-27-52_Walking-Leap-Motion-Crawl-Flat-NoImu-v0_s42/model_2999.pt) | [.onnx](https://huggingface.co/Autobrik/walking-leap/resolve/main/runs/2026-11-26_03-27-52_Walking-Leap-Motion-Crawl-Flat-NoImu-v0_s42/2026-11-26_03-27-52_Walking-Leap-Motion-Crawl-Flat-NoImu-v0_s42.onnx) |
 | crawl, no IMU, seed 43 | [model_2999.pt](https://huggingface.co/Autobrik/walking-leap/resolve/main/runs/2026-11-26_05-12-31_Walking-Leap-Motion-Crawl-Flat-NoImu-v0_s43/model_2999.pt) | [.onnx](https://huggingface.co/Autobrik/walking-leap/resolve/main/runs/2026-11-26_05-12-31_Walking-Leap-Motion-Crawl-Flat-NoImu-v0_s43/2026-11-26_05-12-31_Walking-Leap-Motion-Crawl-Flat-NoImu-v0_s43.onnx) |
+| scripted crawl (Gait-v0), with IMU, seed 42 | [model_2999.pt](https://huggingface.co/Autobrik/walking-leap/resolve/main/runs/2026-11-26_20-44-02_Walking-Leap-Motion-Gait-Flat-v0_s42/model_2999.pt) | [.onnx](https://huggingface.co/Autobrik/walking-leap/resolve/main/runs/2026-11-26_20-44-02_Walking-Leap-Motion-Gait-Flat-v0_s42/2026-11-26_20-44-02_Walking-Leap-Motion-Gait-Flat-v0_s42.onnx) |
 
 Download one run and watch it in the MuJoCo viewer (after `uv sync`; no
 Hugging Face account is needed for the public repository):
@@ -263,6 +274,16 @@ uv run play Walking-Leap-Motion-Crawl-Flat-v0 --viewer native \
   --checkpoint-file outputs/hf/runs/2026-11-26_01-55-17_Walking-Leap-Motion-Crawl-Flat-v0_s42/model_2999.pt
 ```
 
+The scripted-crawl run plays the clip's own sequence of commands:
+
+```sh
+uvx --from huggingface_hub hf download Autobrik/walking-leap \
+  --include "runs/*Gait-Flat-v0*" --local-dir outputs/hf
+uv run play Walking-Leap-Motion-Gait-Flat-v0 --viewer native \
+  --motion-file src/walking_leap/assets/clips/gait.npz \
+  --checkpoint-file outputs/hf/runs/2026-11-26_20-44-02_Walking-Leap-Motion-Gait-Flat-v0_s42/model_2999.pt
+```
+
 The clip's translucent "ghost" hand is not drawn (`debug_vis` in `motion_cfg.py`).
 
 `outputs/` is git-ignored. Play a checkpoint with the task it was trained on
@@ -279,6 +300,25 @@ each, next to a hand that stands still), or watched holding one of them:
 uv run python scripts/eval_velocity.py outputs/hf/runs/<run> [<run> ...]  # table, outputs/eval/
 uv run python scripts/eval_velocity.py outputs/hf/runs/<run> --view --command forward
 ```
+
+## Training on Modal
+
+`cluster/modal_train.py` runs the same `train` on a Modal H100, without a queue:
+the image installs the repository with `uv sync --frozen`; W&B logs online (secret
+`wandb-mg`, a key of the mcgill-projects team) and the run folder goes to the Modal
+volume `walking-leap-runs` and to Hugging Face (`huggingface-secret`).
+
+```sh
+modal run cluster/modal_train.py::check          # GPU, driver, torch, secrets
+modal run cluster/modal_train.py::check_wandb    # the W&B key reaches the project
+modal run cluster/modal_train.py --iterations 10 --no-wandb --no-upload   # smoke
+modal run --detach cluster/modal_train.py --task Walking-Leap-Motion-Gait-Flat-v0 --seed 42
+modal run --detach cluster/modal_train.py --task Walking-Leap-Motion-Gait-Flat-v1 \
+  --seed 42 --resume <v0 run folder> --checkpoint model_2999.pt --iterations 3000
+```
+
+`Walking-Leap-Motion-Gait-Flat-v0` takes 1.3 s per iteration at 4096 environments
+there (10-iteration smoke run, 2026-11-26).
 
 ## Training on an Alliance Canada cluster
 
@@ -367,7 +407,7 @@ rsync -av <cluster>:<repository path>/logs/rsl_rl/ logs/rsl_rl/
 ## Tests
 
 ```sh
-uv run pytest                              # 63 tests: 26 robot/physics, 37 clips and environments
+uv run pytest                              # 65 tests: 26 robot/physics, 39 clips and environments
 CUDA_VISIBLE_DEVICES="" uv run pytest      # CPU only (~2.5 min)
 uv run ruff check src tests scripts && uv run ruff format --check src tests scripts
 uv run python scripts/render_media.py      # regenerate docs/media/

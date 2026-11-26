@@ -6,7 +6,7 @@ only sees what the hand can measure, the encoders and the IMU on its back. It ne
 sees where it is in the world, nor its heading. Clips are written in ``clips.py``.
 """
 
-from dataclasses import replace
+from dataclasses import fields, replace
 
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs import mdp as envs_mdp
@@ -35,8 +35,10 @@ from walking_leap.robot import (
   FINGERTIP_BODIES,
   FINGERTIP_GEOMS,
   FOOT_GEOMS,
+  MEASURED_STIFFNESS,
   ROOT_BODY,
   STIFFNESS,
+  TORSION,
   get_leap_hand_cfg,
   joint_limits,
 )
@@ -411,4 +413,51 @@ def walking_leap_motion_env_cfg(
     command.joint_position_range = (0.0, 0.0)
     command.sampling_mode = "start"
 
+  return cfg
+
+
+# Episodes of the gait task that start with the hand dropped on its side or back.
+FALLEN_START_PROB = 0.2
+
+
+def walking_leap_gait_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+  """Imitate the scripted crawl (assets/clips/gait.npz) and survive: the real hand
+  with the IMU, everything random of ``robust`` and the cables, and falls. A fall
+  no longer ends an episode: the clip waits while the hand is down and resumes where
+  it gets up (``mdp.GaitMotionCommand``); a fifth of the episodes start fallen;
+  rewards for an upright palm at the clip's height, and for moving as the plan
+  intends (``mdp.planned_velocity_exp``), which the slipping replay undershoots.
+  Observations are those of ``Walking-Leap-Motion-Gait-Flat-v0``, so training can
+  continue from its checkpoints."""
+  cfg = walking_leap_motion_env_cfg(
+    play=play,
+    robust=True,
+    cables=True,
+    clip="gait",
+    feet=False,
+    stiffness=MEASURED_STIFFNESS,
+    torsion=TORSION,
+  )
+  motion = {"command_name": "motion"}
+  old = cfg.commands["motion"]
+  cfg.commands["motion"] = mdp.GaitMotionCommandCfg(
+    **{f.name: getattr(old, f.name) for f in fields(old) if f.init},
+    fallen_start_prob=0.0 if play else FALLEN_START_PROB,
+  )
+  for name in ("palm_height", "palm_tilt", "foot_height"):
+    del cfg.terminations[name]
+  cfg.terminations["fallen_too_long"] = TerminationTermCfg(
+    func=mdp.fallen_too_long, params={**motion, "limit_s": 5.0}
+  )
+  cfg.rewards["upright"] = RewardTermCfg(func=mdp.palm_upright, weight=1.0)
+  cfg.rewards["stand_height"] = RewardTermCfg(
+    func=mdp.palm_height_exp, weight=0.5, params={**motion, "std": 0.04}
+  )
+  cfg.rewards["planned_velocity"] = RewardTermCfg(
+    func=mdp.planned_velocity_exp,
+    weight=1.0,
+    params={**motion, "std_lin": 0.02, "std_yaw": 0.3},
+  )
+  if not play:
+    cfg.episode_length_s = 15.0
   return cfg

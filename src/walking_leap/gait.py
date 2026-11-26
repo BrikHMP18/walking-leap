@@ -424,20 +424,28 @@ class Crawler:
     return np.array(keys), plan[-1]
 
 
-def plan(crawler: Crawler, commands: list[str]) -> np.ndarray:
+def plan(crawler: Crawler, commands: list[str]) -> tuple[np.ndarray, np.ndarray]:
   """Servo targets (every KEYFRAME_S) from the folded-thumb stance: a first cycle in
-  place that leaves the stance, then one cycle per command ("stand" holds still)."""
+  place that leaves the stance, then one cycle per command ("stand" holds still).
+  Also, for each target, the command it serves as a planned velocity: forward and
+  left (m/s, heading frame) and turn (rad/s), the cycle's step over its duration."""
   q = crawler.start.copy()
   keys = [crawler.targets_hold(q)]
   new, q = crawler.cycle(q, np.zeros(3), drag_s=FIRST_DRAG_S)
   keys.extend(new)
+  velocity = [np.zeros(3)] * len(keys)
   for name in commands:
     if name == "stand":
-      keys.extend([keys[-1]] * round(STAND_S / KEYFRAME_S))
+      hold = round(STAND_S / KEYFRAME_S)
+      keys.extend([keys[-1]] * hold)
+      velocity.extend([np.zeros(3)] * hold)
       continue
     new, q = crawler.cycle(q, np.array(GAIT_COMMANDS[name]))
     keys.extend(new)
-  return np.array(keys)
+    velocity.extend(
+      [np.array(GAIT_COMMANDS[name]) / (len(new) * KEYFRAME_S)] * len(new)
+    )
+  return np.array(keys), np.array(velocity)
 
 
 def training_commands(cycles: int = 150, seed: int = 0) -> list[str]:
@@ -451,6 +459,7 @@ def training_commands(cycles: int = 150, seed: int = 0) -> list[str]:
   return commands[:cycles]
 
 
-def training_targets(m: mujoco.MjModel) -> np.ndarray:
-  """The gait task's servo targets (the thumb slides along), planned on ``m``."""
+def training_targets(m: mujoco.MjModel) -> tuple[np.ndarray, np.ndarray]:
+  """The gait task's servo targets (the thumb slides along), planned on ``m``, and
+  each target's planned velocity (see ``plan``)."""
   return plan(Crawler(m, thumb_drag=True), training_commands())

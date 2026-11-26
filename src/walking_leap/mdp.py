@@ -2,16 +2,26 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
+import numpy as np
 import torch
 from mjlab.managers.command_manager import CommandTerm
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.sensor import ContactSensor
-from mjlab.tasks.tracking.mdp import MotionCommand
+from mjlab.tasks.tracking.mdp import MotionCommand, MotionCommandCfg
 from mjlab.tasks.velocity.mdp import UniformVelocityCommand, UniformVelocityCommandCfg
-from mjlab.utils.lab_api.math import quat_apply_inverse
+from mjlab.utils.lab_api.math import (
+  quat_apply,
+  quat_apply_inverse,
+  quat_from_angle_axis,
+  quat_inv,
+  quat_mul,
+  sample_uniform,
+  yaw_quat,
+)
 
 if TYPE_CHECKING:
   from mjlab.entity import Entity
@@ -40,6 +50,199 @@ class VelocityCommand(UniformVelocityCommand):
 class VelocityCommandCfg(UniformVelocityCommandCfg):
   def build(self, env: ManagerBasedRlEnv) -> VelocityCommand:
     return VelocityCommand(self, env)
+
+
+class GaitMotionCommand(MotionCommand):
+  """mjlab's ``MotionCommand`` that survives falls (the gait task, v1).
+
+  When the palm tilts past ``fall_tilt`` the hand is *fallen*: the clip stops
+  advancing. Once the palm is back within ``recover_tilt`` and above
+  ``recover_height`` for ``recover_s``, the clip resumes from where it stopped,
+  moved (a turn about the vertical and a shift) so that its palm stands where the
+  real one got up: the imitation then continues from there instead of pulling the
+  hand back to where it fell. With ``fallen_start_prob`` an episode starts with the
+  hand dropped from ``fallen_start_height`` tilted by ``fallen_start_tilt`` (rad)
+  about a random horizontal axis. The clip's ``command`` array (each frame's planned
+  velocity, ``gait.plan``) is available as ``planned_velocity``, zero while fallen.
+  """
+
+  cfg: GaitMotionCommandCfg
+
+  def __init__(self, cfg: GaitMotionCommandCfg, env: ManagerBasedRlEnv):
+    super().__init__(cfg, env)
+    n, frames = self.num_envs, self.motion.time_step_total
+    data = np.load(cfg.motion_file)
+    planned = data["command"] if "command" in data.files else np.zeros((frames, 3))
+    self._planned = torch.tensor(planned, dtype=torch.float32, device=self.device)
+    self.offset_pos = torch.zeros(n, 3, device=self.device)
+    self.offset_quat = torch.zeros(n, 4, device=self.device)
+    self.offset_quat[:, 0] = 1.0
+    self.fallen = torch.zeros(n, dtype=torch.bool, device=self.device)
+    self.fallen_steps = torch.zeros(n, dtype=torch.long, device=self.device)
+    self.upright_steps = torch.zeros(n, dtype=torch.long, device=self.device)
+    self._recover_steps = max(1, round(cfg.recover_s / env.step_dt))
+    self._resetting = False
+    self.metrics["fallen"] = torch.zeros(n, device=self.device)
+    self.metrics["recoveries"] = torch.zeros(n, device=self.device)
+
+  # The clip as each env sees it: turned by offset_quat, shifted by offset_pos.
+
+  def _turn(self, quat: torch.Tensor, x: torch.Tensor, rotate: bool) -> torch.Tensor:
+    if x.dim() == 3:
+      quat = quat[:, None, :].expand(-1, x.shape[1], -1)
+    return quat_apply(quat, x) if rotate else quat_mul(quat, x)
+
+  def _shift(self) -> torch.Tensor:
+    return self.offset_pos + self._env.scene.env_origins
+
+  @property
+  def body_pos_w(self) -> torch.Tensor:
+    pos = self.motion.body_pos_w[self.time_steps]
+    return self._turn(self.offset_quat, pos, True) + self._shift()[:, None, :]
+
+  @property
+  def body_quat_w(self) -> torch.Tensor:
+    return self._turn(self.offset_quat, self.motion.body_quat_w[self.time_steps], False)
+
+  @property
+  def body_lin_vel_w(self) -> torch.Tensor:
+    vel = self.motion.body_lin_vel_w[self.time_steps]
+    return self._turn(self.offset_quat, vel, True)
+
+  @property
+  def body_ang_vel_w(self) -> torch.Tensor:
+    vel = self.motion.body_ang_vel_w[self.time_steps]
+    return self._turn(self.offset_quat, vel, True)
+
+  def _anchor(self, array: torch.Tensor) -> torch.Tensor:
+    return array[self.time_steps, self.motion_anchor_body_index]
+
+  @property
+  def anchor_pos_w(self) -> torch.Tensor:
+    pos = self._anchor(self.motion.body_pos_w)
+    return quat_apply(self.offset_quat, pos) + self._shift()
+
+  @property
+  def anchor_quat_w(self) -> torch.Tensor:
+    return quat_mul(self.offset_quat, self._anchor(self.motion.body_quat_w))
+
+  @property
+  def anchor_lin_vel_w(self) -> torch.Tensor:
+    return quat_apply(self.offset_quat, self._anchor(self.motion.body_lin_vel_w))
+
+  @property
+  def anchor_ang_vel_w(self) -> torch.Tensor:
+    return quat_apply(self.offset_quat, self._anchor(self.motion.body_ang_vel_w))
+
+  @property
+  def planned_velocity(self) -> torch.Tensor:
+    """The clip's planned (forward m/s, left m/s, turn rad/s) now; zero while
+    fallen. Shape [B, 3]."""
+    return self._planned[self.time_steps] * (~self.fallen)[:, None]
+
+  def palm_tilt(self) -> torch.Tensor:
+    """The real palm's tilt from upright (rad). Shape [B]."""
+    gravity = quat_apply_inverse(
+      self.robot_anchor_quat_w, self.robot.data.gravity_vec_w
+    )
+    return torch.acos(torch.clamp(-gravity[:, 2], -1.0, 1.0))
+
+  def reset(self, env_ids: torch.Tensor | slice | None) -> dict[str, float]:
+    self._resetting = True
+    try:
+      return super().reset(env_ids)
+    finally:
+      self._resetting = False
+
+  def _resample_command(self, env_ids: torch.Tensor):
+    self.offset_pos[env_ids] = 0.0
+    self.offset_quat[env_ids] = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device)
+    self.fallen[env_ids] = False
+    self.fallen_steps[env_ids] = 0
+    self.upright_steps[env_ids] = 0
+    super()._resample_command(env_ids)
+    if self._resetting and self.cfg.fallen_start_prob > 0.0:
+      self._start_fallen(env_ids)
+
+  def _start_fallen(self, env_ids: torch.Tensor) -> None:
+    draw = torch.rand(len(env_ids), device=self.device)
+    ids = env_ids[draw < self.cfg.fallen_start_prob]
+    if len(ids) == 0:
+      return
+    low, high = self.cfg.fallen_start_tilt
+    angle = sample_uniform(low, high, (len(ids),), device=self.device)
+    heading = sample_uniform(-math.pi, math.pi, (len(ids),), device=self.device)
+    axis = torch.stack(
+      [torch.cos(heading), torch.sin(heading), torch.zeros_like(heading)], dim=-1
+    )
+    pos = self.body_pos_w[ids, 0].clone()
+    pos[:, 2] = self._env.scene.env_origins[ids, 2] + self.cfg.fallen_start_height
+    quat = quat_mul(quat_from_angle_axis(angle, axis), self.body_quat_w[ids, 0])
+    still = torch.zeros(len(ids), 6, device=self.device)
+    self.robot.write_root_state_to_sim(torch.cat([pos, quat, still], -1), env_ids=ids)
+    self.fallen[ids] = True
+
+  def _reanchor(self, ids: torch.Tensor) -> None:
+    """Move the clip so that its palm, now, stands where the real palm is."""
+    clip_pos = self._anchor(self.motion.body_pos_w)[ids]
+    clip_quat = self._anchor(self.motion.body_quat_w)[ids]
+    turn = yaw_quat(quat_mul(self.robot_anchor_quat_w[ids], quat_inv(clip_quat)))
+    here = self.robot_anchor_pos_w[ids] - self._env.scene.env_origins[ids]
+    shift = here - quat_apply(turn, clip_pos)
+    shift[:, 2] = 0.0
+    self.offset_quat[ids], self.offset_pos[ids] = turn, shift
+
+  def _update_command(self, env_ids: torch.Tensor | None = None):
+    mask = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+    mask[slice(None) if env_ids is None else env_ids] = True
+    tilt = self.palm_tilt()
+    height = self.robot_anchor_pos_w[:, 2] - self._env.scene.env_origins[:, 2]
+    self.fallen |= mask & (tilt > self.cfg.fall_tilt)
+    upright = (tilt < self.cfg.recover_tilt) & (height > self.cfg.recover_height)
+    counting = mask & self.fallen & upright
+    self.upright_steps = torch.where(counting, self.upright_steps + 1, 0)
+    back = self.fallen & (self.upright_steps >= self._recover_steps)
+    if back.any():
+      ids = torch.nonzero(back).squeeze(-1)
+      self._reanchor(ids)
+      self.fallen[ids] = False
+      self.fallen_steps[ids] = 0
+      self.upright_steps[ids] = 0
+      self.metrics["recoveries"][ids] += 1.0
+    self.fallen_steps += (mask & self.fallen).long()
+    # The clip advances only while standing.
+    self.time_steps += (mask & ~self.fallen).long()
+    wrap_ids = torch.where(self.time_steps >= self.motion.time_step_total)[0]
+    if wrap_ids.numel() > 0:
+      self._resample_command(wrap_ids)
+    if self._pending_forward:
+      self._pending_forward = False
+      self._env.sim.forward()
+    self.update_relative_body_poses()
+    if env_ids is None and self.cfg.sampling_mode == "adaptive":
+      self.bin_failed_count = (
+        self.cfg.adaptive_alpha * self._current_bin_failed
+        + (1 - self.cfg.adaptive_alpha) * self.bin_failed_count
+      )
+      self._current_bin_failed.zero_()
+    self.metrics["fallen"] = self.fallen.float()
+
+
+@dataclass(kw_only=True)
+class GaitMotionCommandCfg(MotionCommandCfg):
+  fall_tilt: float = 0.8  # rad (46 deg): beyond this the hand is fallen
+  recover_tilt: float = 0.3  # rad (17 deg)
+  recover_height: float = 0.09  # m, the palm at least this high to count as up
+  recover_s: float = 0.3  # s within both before the clip resumes
+  fallen_start_prob: float = 0.0
+  # rad (57 to 115 deg): falls onto a side, the fingertips or the wrist, which an
+  # open-loop search got up from (scripts/getup_check.py: 0.96 to 1.00); from the back
+  # (164 deg) it only rolled onto a side (0.51).
+  fallen_start_tilt: tuple[float, float] = (1.0, 2.0)
+  fallen_start_height: float = 0.16  # m, the palm dropped from this height
+
+  def build(self, env: ManagerBasedRlEnv) -> GaitMotionCommand:
+    return GaitMotionCommand(self, env)
 
 
 ##
@@ -276,3 +479,47 @@ def mechanical_power(
   asset: Entity = env.scene[asset_cfg.name]
   power = asset.data.qfrc_actuator * asset.data.joint_vel
   return torch.clamp(power, min=0.0).sum(dim=-1)
+
+
+##
+# The gait task's survival terms (GaitMotionCommand).
+##
+
+
+def palm_upright(env: ManagerBasedRlEnv) -> torch.Tensor:
+  """1 with the palm upright, 0 upside down, linear in the cosine of the tilt."""
+  asset: Entity = env.scene[_ROBOT.name]
+  return (1.0 - asset.data.projected_gravity_b[:, 2]) / 2.0
+
+
+def palm_height_exp(
+  env: ManagerBasedRlEnv, command_name: str, std: float
+) -> torch.Tensor:
+  """exp(-(dz / std)^2), dz the real palm's height below or above the clip's."""
+  command = cast(GaitMotionCommand, env.command_manager.get_term(command_name))
+  dz = command.robot_anchor_pos_w[:, 2] - command.anchor_pos_w[:, 2]
+  return torch.exp(-((dz / std) ** 2))
+
+
+def planned_velocity_exp(
+  env: ManagerBasedRlEnv, command_name: str, std_lin: float, std_yaw: float
+) -> torch.Tensor:
+  """How well the palm moves as the clip's plan intends (not as its replay does):
+  the mean of exp(-(e / std)^2) for the horizontal velocity in the palm's heading
+  frame (m/s) and the turn rate (rad/s). Zero while fallen."""
+  command = cast(GaitMotionCommand, env.command_manager.get_term(command_name))
+  asset: Entity = env.scene[command.cfg.entity_name]
+  planned = command.planned_velocity
+  heading = yaw_quat(asset.data.root_link_quat_w)
+  velocity = quat_apply_inverse(heading, asset.data.root_link_lin_vel_w)[:, :2]
+  lin = torch.sum((velocity - planned[:, :2]) ** 2, dim=-1) / std_lin**2
+  yaw = (asset.data.root_link_ang_vel_w[:, 2] - planned[:, 2]) ** 2 / std_yaw**2
+  return 0.5 * (torch.exp(-lin) + torch.exp(-yaw)) * (~command.fallen).float()
+
+
+def fallen_too_long(
+  env: ManagerBasedRlEnv, command_name: str, limit_s: float
+) -> torch.Tensor:
+  """The hand has been fallen for more than ``limit_s`` (s)."""
+  command = cast(GaitMotionCommand, env.command_manager.get_term(command_name))
+  return command.fallen_steps.float() * env.step_dt > limit_s

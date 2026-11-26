@@ -24,28 +24,10 @@ import mujoco
 import numpy as np
 import scripted_gaits as gaits
 
-from walking_leap import clips
+from walking_leap import clips, gait
 
 ROOT = Path(__file__).parents[1]
-COMMANDS = gaits.GAIT_COMMANDS
-STAND_S = 1.0  # s a "stand" holds the targets
-FIRST_DRAG_S = 1.5  # s, the first drag out of the stance (as in teleop)
-
-
-def plan(crawler: gaits.Crawler, commands: list[str]) -> np.ndarray:
-  """Servo targets (every 20 ms) for a first cycle in place, then ``commands``."""
-  q = crawler.start.copy()
-  keys = [crawler.targets_hold(q)]
-  new, q = crawler.cycle(q, np.zeros(3), drag_s=FIRST_DRAG_S)
-  keys.extend(new)
-  for name in commands:
-    if name == "stand":
-      keys.extend([keys[-1]] * round(STAND_S / gaits.KEYFRAME_S))
-      continue
-    command = np.array(COMMANDS[name])
-    new, q = crawler.cycle(q, command)
-    keys.extend(new)
-  return np.array(keys)
+COMMANDS = gait.GAIT_COMMANDS
 
 
 def random_hand(model: mujoco.MjModel, rng: np.random.Generator) -> mujoco.MjModel:
@@ -120,7 +102,7 @@ def main() -> None:
   args = parser.parse_args()
 
   hand = clips.RealHand()
-  crawler = gaits.Crawler(gaits.build(), thumb_drag=True)
+  crawler = gait.Crawler(gaits.build(), thumb_drag=True)
   rng = np.random.default_rng(args.seed)
   sequences = {name: [name] * args.cycles for name in COMMANDS}
   mix = [str(rng.choice(list(COMMANDS))) for _ in range(args.mix)]
@@ -136,7 +118,7 @@ def main() -> None:
     f"{args.hands} random hands: standing, fwd mm, left mm, turn deg"
   )
   for name, commands in sequences.items():
-    keys = plan(crawler, commands)
+    keys, _ = gait.plan(crawler, commands)
     motion = clips.replay(f"gait_{name}", hand, q=keys)
     clips.save(motion, hand, args.out / f"gait_{name}.npz")
     nominal = play(hand.model, keys)

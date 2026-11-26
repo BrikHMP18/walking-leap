@@ -341,8 +341,14 @@ def replay(
   return Motion(name, qpos, lifted, np.zeros(len(q)))
 
 
-def save(motion: Motion, kin: Kinematics | RealHand, path: Path) -> None:
-  """Write mjlab's motion format: joints, and every body's pose and velocity."""
+def save(
+  motion: Motion,
+  kin: Kinematics | RealHand,
+  path: Path,
+  extra: dict[str, np.ndarray] | None = None,
+) -> None:
+  """Write mjlab's motion format: joints, and every body's pose and velocity, plus
+  ``extra`` arrays (one row a frame; mjlab's loader ignores them)."""
   m, d = kin.model, kin.data
   n = len(motion.qpos)
   qvel = np.zeros((n, m.nv))
@@ -371,6 +377,7 @@ def save(motion: Motion, kin: Kinematics | RealHand, path: Path) -> None:
     body_lin_vel_w=lin,
     body_ang_vel_w=ang,
   )
+  arrays.update(extra or {})
   arrays = {k: v.astype(np.float32) for k, v in arrays.items()}
   np.savez_compressed(path, fps=np.array([FPS]), **arrays)
 
@@ -419,11 +426,13 @@ def main() -> None:
 
 def write_gait(hand: RealHand) -> Motion:
   """assets/clips/gait.npz: the scripted crawl's targets (``gait.training_targets``)
-  replayed on the real hand's model."""
+  replayed on the real hand's model, with each frame's planned velocity
+  (``command``: forward, left m/s; turn rad/s)."""
   from walking_leap import gait
 
-  motion = replay("gait", hand, q=gait.training_targets(hand.model))
-  save(motion, hand, CLIPS_DIR / "gait.npz")
+  targets, velocity = gait.training_targets(hand.model)
+  motion = replay("gait", hand, q=targets)
+  save(motion, hand, CLIPS_DIR / "gait.npz", extra={"command": velocity})
   moved = 1e3 * (motion.qpos[-1, :2] - motion.qpos[0, :2])
   print("gait", {"frames": len(motion.qpos), "moved_mm": moved.round(1).tolist()})
   return motion

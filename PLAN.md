@@ -175,8 +175,28 @@ The trainings below that are checked come from a branch, not from this milestone
   - [x] `Walking-Leap-Motion-Gait-Flat-v0`: imitate 150 random cycles of it, with the
         IMU, nothing random (`test_gait_file_is_up_to_date`,
         `test_crawl_as_targets_stays_close[...Gait...]`); 10-iteration smoke run
-  - [ ] Train it, 2 seeds; then randomization and pushes; then getting up after a
-        fall, in the same policy (falls no longer end an episode)
+  - [x] Trained, one seed, 3000 iterations on Modal (W&B `pmh0h1vl`, Hugging Face
+        `runs/2026-11-26_20-44-02_Walking-Leap-Motion-Gait-Flat-v0_s42`). Training log,
+        iterations 2958-2999: palm 8.5 mm and 4.1° from the clip, episodes 499.4 of
+        500 steps, no palm-height or tilt terminations, saturation 0.5 %
+  - [ ] Evaluate v0 outside training: does the palm move as each command plans
+  - [ ] Keyboard demo: the planner generates the reference live from the keys, the
+        policy follows it (checks it obeys commands in orders it never saw)
+  - [x] Getting up is possible open loop from a side, the fingertips or the wrist
+        (57-115° tilt; best scores 0.96-1.00), not found from the back (164°, 0.51:
+        it rolls onto a side) (`scripts/getup_check.py`)
+  - [x] `Walking-Leap-Motion-Gait-Flat-v1`: randomization, pushes, cables, falls that
+        do not end the episode (`mdp.GaitMotionCommand`: the clip waits, resumes
+        where the hand gets up), a fifth of the episodes started fallen, rewards for
+        an upright palm and the planned velocity; same observations as v0
+        (`test_gait_v1_keeps_v0_observations`,
+        `test_gait_v1_clip_waits_while_fallen_and_resumes_where_the_hand_gets_up`);
+        10-iteration smoke run, and continuing a v0 checkpoint loads
+  - [ ] Train v1 from v0's checkpoint; measure falls, recoveries and push survival
+  - [ ] A velocity-command student: distill v1 (teacher, given the planner's
+        reference for a commanded velocity) into a policy that sees only the command,
+        encoders and IMU (rsl-rl's `Distillation`, not yet wired in mjlab), then
+        fine-tune it with PPO on velocity tracking
   - [ ] The physics replay moves less than planned: right about 2 mm a cycle (8
         planned), back 7 (20), turns 4-7 deg (20); forward drifts left 8 mm a cycle
 - [ ] Keyboard teleoperation of the velocity command in `play`

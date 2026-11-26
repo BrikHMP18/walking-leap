@@ -6,6 +6,7 @@ import pytest
 import torch
 from mjlab.envs import ManagerBasedRlEnv
 from mjlab.tasks.registry import list_tasks, load_env_cfg
+from mjlab.utils.lab_api import math as mjmath
 
 from walking_leap import clips, gait, mdp, robot
 from walking_leap.motion_cfg import (
@@ -264,10 +265,12 @@ def test_gait_file_is_up_to_date():
   """assets/clips/gait.npz is gait.py's crawl replayed on the real hand's model, and
   the hand stays up for all of it."""
   hand = clips.RealHand()
-  motion = clips.replay("gait", hand, q=gait.training_targets(hand.model))
+  targets, velocity = gait.training_targets(hand.model)
+  motion = clips.replay("gait", hand, q=targets)
   saved = np.load(clips.CLIPS_DIR / "gait.npz")
   assert saved["fps"][0] == clips.FPS and len(saved["joint_pos"]) == len(motion.qpos)
   assert np.allclose(saved["joint_pos"], motion.qpos[:, 7:], atol=2e-3)
+  assert np.allclose(saved["command"], velocity, atol=1e-6)  # planned velocity
   palm = saved["body_pos_w"][:, 0]
   assert palm[:, 2].min() > 0.10  # the palm stays up (it starts at 0.13 m)
   w, x, y, z = saved["body_quat_w"][:, 0].T
@@ -279,3 +282,58 @@ def test_gait_task_sees_the_imu():
   assert cfg.commands["motion"].motion_file.endswith("gait.npz")
   actor = list(cfg.observations["actor"].terms)
   assert "base_ang_vel" in actor and "projected_gravity" in actor
+
+
+##
+# The gait task that survives falls (v1, mdp.GaitMotionCommand).
+##
+
+GAIT_V1_TASK = "Walking-Leap-Motion-Gait-Flat-v1"
+
+
+def test_gait_v1_keeps_v0_observations():
+  """Same inputs as v0, so v1 can continue from v0's checkpoints."""
+  v0, v1 = load_env_cfg(GAIT_TASK), load_env_cfg(GAIT_V1_TASK)
+  for group in ("actor", "critic"):
+    assert list(v0.observations[group].terms) == list(v1.observations[group].terms)
+  assert not {"palm_height", "palm_tilt", "foot_height"} & set(v1.terminations)
+
+
+def test_gait_v1_clip_waits_while_fallen_and_resumes_where_the_hand_gets_up():
+  cfg = load_env_cfg(GAIT_V1_TASK)
+  cfg.scene.num_envs = NUM_ENVS
+  cfg.seed = 0
+  command_cfg = cfg.commands["motion"]
+  command_cfg.fallen_start_prob = 1.0
+  env = ManagerBasedRlEnv(cfg, device=DEVICE)
+  try:
+    env.reset()
+    command = env.command_manager.get_term("motion")
+    assert command.fallen.all()
+    frame = command.time_steps.clone()
+    for _ in range(10):
+      env.step(torch.zeros(env.num_envs, 16, device=env.device))
+    assert (command.time_steps == frame).all()  # the clip waited
+    assert (command.planned_velocity == 0).all()
+    # Put the hand back on its feet as the clip stands now, 5 cm aside, turned 30 deg.
+    robot = env.scene["robot"]
+    turn = torch.tensor([np.cos(np.pi / 12), 0, 0, np.sin(np.pi / 12)], device=DEVICE)
+    turn = turn.repeat(NUM_ENVS, 1).float()
+    root = torch.zeros(NUM_ENVS, 13, device=DEVICE)
+    root[:, :3] = command.body_pos_w[:, 0] + torch.tensor(
+      [0.05, 0.0, 0.0], device=DEVICE
+    )
+    root[:, 3:7] = mjmath.quat_mul(turn, command.body_quat_w[:, 0])
+    robot.write_root_state_to_sim(root)
+    robot.write_joint_state_to_sim(
+      command.joint_pos, torch.zeros_like(command.joint_pos)
+    )
+    for _ in range(command._recover_steps + 2):
+      env.step(reference_action(env))
+    assert not command.fallen.any()
+    assert (command.time_steps > frame).all()  # the clip goes on
+    # It goes on from where the hand stood up, not where it fell.
+    gap = (command.anchor_pos_w - command.robot_anchor_pos_w)[:, :2].norm(dim=-1)
+    assert gap.max() < 0.02
+  finally:
+    env.close()
