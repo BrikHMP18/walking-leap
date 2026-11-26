@@ -517,6 +517,14 @@ def planned_velocity_exp(
   return 0.5 * (torch.exp(-lin) + torch.exp(-yaw)) * (~command.fallen).float()
 
 
+def planned_command(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
+  """The plan's velocity now, as a velocity command: (forward m/s, left m/s, turn
+  rad/s) in the palm's heading frame; zero while fallen. On the hand it is the
+  operator's command (the keyboard)."""
+  command = cast(GaitMotionCommand, env.command_manager.get_term(command_name))
+  return command.planned_velocity
+
+
 def fallen_too_long(
   env: ManagerBasedRlEnv, command_name: str, limit_s: float
 ) -> torch.Tensor:

@@ -461,3 +461,37 @@ def walking_leap_gait_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   if not play:
     cfg.episode_length_s = 15.0
   return cfg
+
+
+STUDENT_HISTORY = 5  # steps (0.1 s): without the clip, the student tells the phase
+
+
+def walking_leap_gait_student_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+  """``Walking-Leap-Motion-Gait-Flat-v1`` for a teacher-student distillation. The
+  teacher (a v1 checkpoint) keeps its inputs, the clip included. The student sees
+  only what the real hand has with a keyboard: the plan's velocity as its command
+  (``mdp.planned_command``), the IMU, the encoders and its last action, over the last
+  ``STUDENT_HISTORY`` steps, with the teacher's sensor noise. The rewards are only
+  logged (distillation does not use them)."""
+  cfg = walking_leap_gait_env_cfg(play=play)
+  teacher = cfg.observations.pop("actor")
+  del cfg.observations["critic"]
+  student_terms = {
+    "command": ObservationTermCfg(
+      func=mdp.planned_command, params={"command_name": "motion"}
+    ),
+    **{
+      name: replace(term)
+      for name, term in teacher.terms.items()
+      if not name.startswith("reference_")
+    },
+  }
+  cfg.observations = {
+    "student": ObservationGroupCfg(
+      terms=student_terms,
+      enable_corruption=teacher.enable_corruption,
+      history_length=STUDENT_HISTORY,
+    ),
+    "teacher": teacher,
+  }
+  return cfg

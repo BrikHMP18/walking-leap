@@ -438,5 +438,27 @@ def write_gait(hand: RealHand) -> Motion:
   return motion
 
 
+GAIT_KEYS = (  # command, axis of (forward, left, turn), sign
+  ("forward", 0, 1),
+  ("back", 0, -1),
+  ("left", 1, 1),
+  ("right", 1, -1),
+  ("turn_left", 2, 1),
+  ("turn_right", 2, -1),
+)
+
+
+def gait_command_velocities() -> dict[str, np.ndarray]:
+  """Each command's velocity as a gait student saw it: gait.npz's planned velocity
+  (forward m/s, left m/s, turn rad/s) averaged over the frames of that command (its
+  cycles last 1.08-1.10 s). What a keyboard sends for that command."""
+  planned = np.load(CLIPS_DIR / "gait.npz")["command"]
+  out = {}
+  for name, axis, sign in GAIT_KEYS:
+    alone = np.count_nonzero(planned, axis=1) == 1
+    out[name] = planned[alone & (np.sign(planned[:, axis]) == sign)].mean(0)
+  return out
+
+
 if __name__ == "__main__":
   main()

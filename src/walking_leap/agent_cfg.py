@@ -1,8 +1,11 @@
-"""PPO (RSL-RL) configuration. Algorithm values are mjlab's defaults."""
+"""PPO (RSL-RL) configuration. Algorithm values are mjlab's defaults. Also the
+teacher-student distillation of the scripted-crawl policy."""
 
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
+from typing import Literal
 
 from mjlab.rl import RslRlModelCfg, RslRlOnPolicyRunnerCfg, RslRlPpoAlgorithmCfg
+from mjlab.rl.config import RslRlBaseRunnerCfg
 
 
 def walking_leap_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
@@ -72,3 +75,64 @@ def walking_leap_crawl_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
   """Imitating the real crawl: 3000 iterations (hello: 2000 nominal, 3000
   randomized)."""
   return replace(walking_leap_motion_ppo_runner_cfg(), max_iterations=3_000)
+
+
+##
+# Distillation (teacher -> student). mjlab 1.6.1 has config classes for PPO only;
+# these mirror rsl-rl's Distillation and DistillationRunner arguments.
+##
+
+
+@dataclass
+class RslRlDistillationAlgorithmCfg:
+  """rsl-rl's ``Distillation``: behaviour cloning of the teacher's actions on the
+  states the student visits (DAgger)."""
+
+  num_learning_epochs: int = 1
+  gradient_length: int = 15
+  """Mini-batches (of one step each) accumulated per gradient step."""
+  learning_rate: float = 1e-3
+  max_grad_norm: float | None = 1.0
+  loss_type: Literal["mse", "huber"] = "mse"
+  optimizer: Literal["adam", "adamw", "sgd", "rmsprop"] = "adam"
+  class_name: str = "Distillation"
+
+
+@dataclass
+class RslRlDistillationRunnerCfg(RslRlBaseRunnerCfg):
+  class_name: str = "DistillationRunner"
+  student: RslRlModelCfg = field(default_factory=RslRlModelCfg)
+  teacher: RslRlModelCfg = field(default_factory=RslRlModelCfg)
+  algorithm: RslRlDistillationAlgorithmCfg = field(
+    default_factory=RslRlDistillationAlgorithmCfg
+  )
+
+
+def walking_leap_gait_student_runner_cfg() -> RslRlDistillationRunnerCfg:
+  """A velocity-command student of the scripted-crawl policy. The teacher is the
+  PPO actor (same network, so its checkpoint loads as is: pass it with
+  ``--agent.resume True --agent.load-run <run> --agent.load-checkpoint <file>``).
+  The student is the same network on its own inputs, with the actor's Gaussian
+  head so that PPO can continue from it; its noise during the rollouts is the
+  teacher's final one (0.05)."""
+  ppo = walking_leap_crawl_ppo_runner_cfg()
+  return RslRlDistillationRunnerCfg(
+    student=replace(
+      ppo.actor,
+      distribution_cfg={**ppo.actor.distribution_cfg, "init_std": 0.05},
+    ),
+    teacher=ppo.actor,
+    # Huber, not MSE: the teacher's raw actions reach far beyond the joint limits
+    # (RMS 10.5, up to 78, against limits about 1-8 from the stance at scale 0.25;
+    # measured on the Gait-v0 run), and the action term clips them there.
+    algorithm=RslRlDistillationAlgorithmCfg(loss_type="huber"),
+    obs_groups={"student": ("student",), "teacher": ("teacher",)},
+    num_steps_per_env=24,
+    max_iterations=1_500,
+    save_interval=100,
+    seed=42,
+    experiment_name=ppo.experiment_name,  # where the teacher's runs are
+    logger="tensorboard",
+    wandb_project=ppo.wandb_project,
+    upload_model=False,
+  )

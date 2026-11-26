@@ -255,6 +255,12 @@ class Clip:
     self.sha = hashlib.sha256(open(path, "rb").read()).hexdigest()[:12]
 
 
+class Steer:
+  """``steer`` in the list of clips: a velocity policy, from the keyboard (Control.steer)."""
+
+  name, start, end, sha = "steer", "stand", "stand", "-"
+
+
 # ---------------------------------------------------------------------------- the loop
 class Control:
   def __init__(self, hand, imu, rec, max_tilt=40.0, max_off=15.0, sat_s=1.5):
@@ -349,7 +355,11 @@ class Control:
     n0, t0 = len(self.rec.m), time.monotonic()
     policy = (
       self.policy
-      if (self.policy is not None and clip.name.startswith(self.policy.clip))
+      if (
+        self.policy is not None
+        and self.policy.clip is not None
+        and clip.name.startswith(self.policy.clip)
+      )
       else None
     )
     if policy is not None:
@@ -393,6 +403,96 @@ class Control:
       raise SoftStop(f"a motor is at {np.nanmax(t):.0f} C")
 
 
+  def steer(self, keys, stand):
+    """A velocity policy walks as the keys say until they quit, then the hand stands
+    still for a second and eases back to ``stand`` (the next clip's first targets). In
+    the shadow (not live) the stance is held while the policy is computed and logged."""
+    if self.where != "stand":
+      raise Abort(f"steering starts standing, the hand is {self.where}")
+    policy, hold = self.policy, self.q.copy()
+    if policy is None or policy.clip is not None:
+      raise SystemExit("steer needs a velocity policy (--policy)")
+    policy.reset()
+    self.clip_no += 1
+    self.where, name, t0, pol = "moving", "stand", time.monotonic(), []
+    self.rec.event(f"steer: {'LIVE' if self.live else 'in the shadow'}, {keys.HELP}")
+    quit_at = None
+    while quit_at is None or time.monotonic() - quit_at < 1.0:
+      key = keys.read()
+      if key == "quit" and quit_at is None:
+        quit_at, key = time.monotonic(), "stand"
+      if key is not None and key != "quit":
+        name = "stand" if key == name else key
+        self.rec.event(f"steer: {name}")
+      command = policy.commands.get(name, np.zeros(3))
+      s, q, dq, cur, qc = self.hand.read()
+      pq = policy.act(command, q, dq, self.imu.gyro_mean(0.01), self.imu.latest.gravity)
+      pol.append(np.abs(pq - hold))
+      self.step(pq if self.live else hold, None, self.clip_no, -1, pq)
+    self.rec.event(
+      f"steer: done in {time.monotonic() - t0:.1f} s, policy {np.mean(pol):.3f} rad from"
+      f" the stance on average, worst {np.max(pol):.2f}"
+    )
+    self.ramp(stand, 0.3)
+    self.where = "stand"
+
+
+class Keys:
+  """The terminal's keys, without waiting: arrows move, ',' and '.' turn, the same key
+  again (or space) stands still, q ends. Nothing without a terminal."""
+
+  HELP = "arrows move, ',' '.' turn, the same key again or space: stand, q: end"
+  NAMES = {
+    "\x1b[A": "forward",
+    "\x1b[B": "back",
+    "\x1b[D": "left",
+    "\x1b[C": "right",
+    ",": "turn_left",
+    ".": "turn_right",
+    " ": "stand",
+    "q": "quit",
+  }
+
+  def __enter__(self):
+    import termios
+    import tty
+
+    self.fd = sys.stdin.fileno() if sys.stdin.isatty() else None
+    if self.fd is not None:
+      self.saved = termios.tcgetattr(self.fd)
+      tty.setcbreak(self.fd)
+    return self
+
+  def __exit__(self, *e):
+    if self.fd is not None:
+      import termios
+
+      termios.tcsetattr(self.fd, termios.TCSADRAIN, self.saved)
+
+  def read(self):
+    """The last key pressed since the previous call, by name, or None."""
+    import select
+
+    if self.fd is None:
+      return None
+    text = ""
+    while select.select([self.fd], [], [], 0)[0]:
+      text += os.read(self.fd, 32).decode(errors="ignore")
+    return self.parse(text)
+
+  @classmethod
+  def parse(cls, text):
+    found, i = None, 0
+    while i < len(text):
+      for seq, name in cls.NAMES.items():
+        if text.startswith(seq, i):
+          found, i = name, i + len(seq)
+          break
+      else:
+        i += 1
+    return found
+
+
 def soft_down(ctl):
   """Level and not fallen: go to the stand and lie down."""
   down = Clip("lie_down")
@@ -418,8 +518,10 @@ def run(
   start="lying",
 ):
   """Play clips one after the other, from lying. Torque is off when it returns."""
-  clips = [Clip(n) for n in names]
+  clips = [Steer() if n == "steer" else Clip(n) for n in names]
   for a, b in zip(clips, clips[1:]):
+    if isinstance(a, Steer) or isinstance(b, Steer):
+      continue  # steering starts where stand_up ends and eases back to what follows
     if a.end != b.start:
       raise SystemExit(f"{a.name} ends {a.end}, {b.name} starts {b.start}")
     if a.end == "stand" and np.abs(a.q[-1] - b.q[0]).max() > 0.05:
@@ -441,6 +543,7 @@ def run(
     raise_on_signals()
     imu, hand = TM171(), Hand(gains)
   name = label or "_".join(dict.fromkeys(c.name for c in clips))[:60]
+  keys = Keys()
   with imu:
     imu.wait()
     time.sleep(0.0 if (fake or devices) else 1.2)
@@ -476,8 +579,13 @@ def run(
           f"torque on, tilt {np.degrees(np.arccos(min(1, -imu.latest.gravity[2]))):.1f} deg, "
           f"{np.nanmin(meta['temps_before']):.0f}-{np.nanmax(meta['temps_before']):.0f} C"
         )
-        for c in clips:
-          ctl.play(c, speed)
+        for i, c in enumerate(clips):
+          if isinstance(c, Steer):
+            after = clips[i + 1].q[0] if i + 1 < len(clips) else ctl.q
+            with keys:
+              ctl.steer(keys, after)
+          else:
+            ctl.play(c, speed)
           ctl.hold(rest)
         ok = True
       except SoftStop as e:

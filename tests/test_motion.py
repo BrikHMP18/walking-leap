@@ -337,3 +337,85 @@ def test_gait_v1_clip_waits_while_fallen_and_resumes_where_the_hand_gets_up():
     assert gap.max() < 0.02
   finally:
     env.close()
+
+
+GAIT_STUDENT_TASK = "Walking-Leap-Motion-Gait-Flat-Student-v0"
+
+
+def test_gait_student_sees_a_command_not_the_clip():
+  """The student gets what the real hand has with a keyboard; the teacher keeps
+  v1's actor inputs, so a v1 checkpoint is a teacher."""
+  v1, student = load_env_cfg(GAIT_V1_TASK), load_env_cfg(GAIT_STUDENT_TASK)
+  assert list(student.observations["teacher"].terms) == list(
+    v1.observations["actor"].terms
+  )
+  terms = student.observations["student"].terms
+  assert list(terms) == [
+    "command",
+    "base_ang_vel",
+    "projected_gravity",
+    "joint_pos",
+    "joint_vel",
+    "actions",
+  ]
+  assert student.observations["student"].enable_corruption
+  play = load_env_cfg(GAIT_STUDENT_TASK, play=True)
+  assert not play.observations["student"].enable_corruption
+
+
+def test_gait_student_runner_takes_a_ppo_teacher_and_plays_the_student(tmp_path):
+  """train --agent.resume loads a PPO (v1) actor as the teacher; play, loading
+  {"actor": True}, gets the trained student."""
+  from dataclasses import asdict
+
+  from mjlab.rl import RslRlVecEnvWrapper
+  from mjlab.tasks.registry import load_rl_cfg
+  from rsl_rl.models import MLPModel
+
+  from walking_leap.runner import GaitStudentRunner
+
+  cfg = load_env_cfg(GAIT_STUDENT_TASK)
+  cfg.scene.num_envs = 2
+  env = RslRlVecEnvWrapper(ManagerBasedRlEnv(cfg, device=DEVICE))
+  try:
+    obs = env.get_observations()
+    assert obs["student"].shape[-1] == 5 * (3 + 3 + 3 + 16 + 16 + 16)
+
+    # A v1 actor, as PPO builds it, with weights of its own.
+    actor_cfg = asdict(load_rl_cfg(GAIT_V1_TASK).actor)
+    for key in (
+      "class_name",
+      "cnn_cfg",
+      "rnn_type",
+      "rnn_hidden_dim",
+      "rnn_num_layers",
+    ):
+      actor_cfg.pop(key)
+    actor = MLPModel(obs, {"actor": ["teacher"]}, "actor", 16, **actor_cfg)
+    for p in actor.parameters():
+      torch.nn.init.normal_(p)
+    ppo = tmp_path / "model_5999.pt"
+    torch.save({"actor_state_dict": actor.state_dict(), "iter": 5999, "infos": {}}, ppo)
+
+    agent = asdict(load_rl_cfg(GAIT_STUDENT_TASK))
+    runner = GaitStudentRunner(env, agent, str(tmp_path / "run"), DEVICE)
+    runner.load(str(ppo))
+    assert runner.alg.teacher_loaded
+    assert runner.current_learning_iteration == 0  # a new training, not v1's
+    x = obs.to(DEVICE)
+    with torch.inference_mode():
+      assert torch.allclose(runner.alg.teacher(x), actor.to(DEVICE)(x))
+
+    for p in runner.alg.student.parameters():
+      torch.nn.init.normal_(p)
+    runner.save(str(tmp_path / "student.pt"))
+    player = GaitStudentRunner(
+      env, asdict(load_rl_cfg(GAIT_STUDENT_TASK)), None, DEVICE
+    )
+    player.load(str(tmp_path / "student.pt"), load_cfg={"actor": True})
+    with torch.inference_mode():
+      assert torch.allclose(
+        player.get_inference_policy(DEVICE)(x), runner.alg.student(x)
+      )
+  finally:
+    env.close()

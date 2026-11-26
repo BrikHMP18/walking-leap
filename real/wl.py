@@ -5,6 +5,7 @@
   real/wl play stand_up crawl lie_down --policy NAME      # a policy in the shadow (computed, not sent)
   real/wl play stand_up crawl lie_down --policy NAME --live   # the policy drives
   real/wl play ... --fake                       # the driver's simulated motors and a level IMU: no hardware
+  real/wl play stand_up steer lie_down --policy NAME [--live]   # a velocity policy, from the keyboard
   real/wl thumb                                 # lying: where does the thumb stop? (one joint at a time)
   real/wl list                                  # the clips (docs/data/real_clips/)
   touch real/STOP                               # stop: lies down if it can, then torque off
@@ -104,10 +105,14 @@ def main():
     return 0
   pol = None
   if a.policy:
-    from policy import MotionPolicy
+    from policy import MotionPolicy, VelocityPolicy
 
     p = a.policy if a.policy.endswith(".npz") else f"{wlc.POLICIES}/{a.policy}.npz"
-    pol = MotionPolicy(p)
+    with np.load(p) as f:
+      velocity = "kind" in f.files and str(f["kind"]) == "velocity"
+    pol = VelocityPolicy(p) if velocity else MotionPolicy(p)
+    if velocity and "steer" not in a.clips:
+      raise SystemExit("a velocity policy runs in a steer step: stand_up steer lie_down")
   ok, path = wlc.run(
     a.clips,
     gains=gains,

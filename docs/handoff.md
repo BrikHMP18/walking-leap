@@ -102,8 +102,8 @@ needing the one before:
   `1, 0, 2, 3, 5, 4, 6, 7, 9, 8, 10, 11, 12, 13, 14, 15`. Checked on the hand.
 - **The IMU is turned 90° on the hand:** palm x = −IMU y, palm y = +IMU x, palm z = IMU z
   (the model's `IMU_QUAT`). Checked on the hand for x and y.
-- The loop that drives the hand is not in this repository: it uses a driver that isn't
-  public. Ask Mathias to run a policy on the hand.
+- The loop that drives the hand is in [`real/`](../real/README.md); the motor driver it
+  uses (dexhw) isn't public. Ask Mathias to run a policy on the hand.
 
 ## Hardware
 

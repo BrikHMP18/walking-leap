@@ -8,6 +8,7 @@ from mjlab.tasks.tracking.rl import MotionTrackingOnPolicyRunner
 
 from walking_leap.agent_cfg import (
   walking_leap_crawl_ppo_runner_cfg,
+  walking_leap_gait_student_runner_cfg,
   walking_leap_motion_ppo_runner_cfg,
   walking_leap_ppo_runner_cfg,
   walking_leap_real_ppo_runner_cfg,
@@ -19,9 +20,11 @@ from walking_leap.env_cfg import (
 )
 from walking_leap.motion_cfg import (
   walking_leap_gait_env_cfg,
+  walking_leap_gait_student_env_cfg,
   walking_leap_motion_env_cfg,
 )
 from walking_leap.robot import MEASURED_STIFFNESS, TORSION
+from walking_leap.runner import GaitStudentRunner
 
 register_mjlab_task(
   task_id="Walking-Leap-Flat-v0",
@@ -97,4 +100,15 @@ register_mjlab_task(
   play_env_cfg=walking_leap_gait_env_cfg(play=True),
   rl_cfg=walking_leap_crawl_ppo_runner_cfg(),
   runner_cls=MotionTrackingOnPolicyRunner,
+)
+
+# A student of Gait-v1 that walks from a velocity command: it copies a v1 checkpoint
+# (the teacher, loaded with --agent.resume) seeing only the plan's velocity, the IMU,
+# the encoders and its last actions, never the clip. Teacher-student distillation.
+register_mjlab_task(
+  task_id="Walking-Leap-Motion-Gait-Flat-Student-v0",
+  env_cfg=walking_leap_gait_student_env_cfg(),
+  play_env_cfg=walking_leap_gait_student_env_cfg(play=True),
+  rl_cfg=walking_leap_gait_student_runner_cfg(),
+  runner_cls=GaitStudentRunner,
 )

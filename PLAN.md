@@ -179,7 +179,11 @@ The trainings below that are checked come from a branch, not from this milestone
         `runs/2026-11-26_20-44-02_Walking-Leap-Motion-Gait-Flat-v0_s42`). Training log,
         iterations 2958-2999: palm 8.5 mm and 4.1° from the clip, episodes 499.4 of
         500 steps, no palm-height or tilt terminations, saturation 0.5 %
-  - [ ] Evaluate v0 outside training: does the palm move as each command plans
+  - [x] Evaluate v0 outside training (`scripts/eval_gait.py`, 6 cycles per command, 4
+        hands, nominal; outputs/eval/): forward 180 mm of 180 planned, straighter than
+        its clip; the rest follow the clip's shortfall, or worse: back -36 mm of -120
+        (clip -52), left 32 of 90 (48), right -13 of -48 (-28), turns +10/-32 deg of
+        120 (clip +23/-42); no falls. The reference, not the learning, limits it
   - [ ] Keyboard demo: the planner generates the reference live from the keys, the
         policy follows it (checks it obeys commands in orders it never saw)
   - [x] Getting up is possible open loop from a side, the fingertips or the wrist
@@ -195,8 +199,21 @@ The trainings below that are checked come from a branch, not from this milestone
   - [ ] Train v1 from v0's checkpoint; measure falls, recoveries and push survival
   - [ ] A velocity-command student: distill v1 (teacher, given the planner's
         reference for a commanded velocity) into a policy that sees only the command,
-        encoders and IMU (rsl-rl's `Distillation`, not yet wired in mjlab), then
-        fine-tune it with PPO on velocity tracking
+        encoders and IMU, then fine-tune it with PPO on velocity tracking
+    - [x] `Walking-Leap-Motion-Gait-Flat-Student-v0`: rsl-rl's `Distillation` through
+          `runner.GaitStudentRunner`; the student sees the plan's velocity, IMU,
+          encoders and last action over 5 steps; Huber loss (the teacher's raw actions
+          reach 78, far past the joint limits) (`test_gait_student_sees_a_command_not_the_clip`,
+          `test_gait_student_runner_takes_a_ppo_teacher_and_plays_the_student`); 40
+          local iterations with v0 as teacher: loss 3.4 -> 1.2, episodes 13 -> 571 steps
+    - [ ] Distill from the v1 checkpoint; evaluate with `scripts/eval_gait.py`
+    - [x] Keyboard: `scripts/steer_student.py` (viewer); the real loop's `steer` step
+          (`real/wl play stand_up steer lie_down`), `policy.VelocityPolicy` and its export
+          (`test_velocity_policy_builds_the_students_observation`,
+          `test_steer_runs_a_velocity_policy_between_stand_up_and_lie_down`)
+    - [ ] On the real hand: shadow, then live
+    - [ ] PPO fine-tuning of the student on velocity tracking; compare with Flat-v3
+          (`scripts/eval_velocity.py`)
   - [ ] The physics replay moves less than planned: right about 2 mm a cycle (8
         planned), back 7 (20), turns 4-7 deg (20); forward drifts left 8 mm a cycle
 - [ ] Keyboard teleoperation of the velocity command in `play`

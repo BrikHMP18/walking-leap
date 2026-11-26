@@ -16,6 +16,7 @@ import argparse
 import os
 import re
 import sys
+from dataclasses import asdict
 
 import numpy as np
 import torch
@@ -38,11 +39,87 @@ def gravity_in_palm(quat_wxyz: np.ndarray) -> np.ndarray:
   )
 
 
+def export_velocity(d: dict, out: str) -> int:
+  """A velocity-command student (Walking-Leap-Motion-Gait-Flat-Student-v0): no clip, no
+  reference; its history length and each keyboard command's velocity go in the file.
+  Checked against the student as rsl-rl runs it (the checkpoint has no ONNX)."""
+  from mjlab.tasks.registry import load_rl_cfg
+  from rsl_rl.models import MLPModel
+  from tensordict import TensorDict
+
+  import walking_leap  # noqa: F401  (registers the tasks)
+  from walking_leap.clips import gait_command_velocities
+  from walking_leap.motion_cfg import STUDENT_HISTORY
+  from policy import VelocityPolicy
+
+  layers = sorted(
+    int(m.group(1)) for k in d if (m := re.fullmatch(r"mlp\.(\d+)\.weight", k))
+  )
+  J = robot.JOINT_NAMES
+  assert J == wlc.JOINT_NAMES, "the loop's joint order is the repo's"
+  limits = robot.joint_limits(as_built=True)
+  stance = [
+    next(v for k, v in robot.FOLDED_JOINT_POS.items() if re.fullmatch(k, n)) for n in J
+  ]
+  commands = gait_command_velocities()
+
+  def save(eps: float) -> None:
+    w = {}
+    for i, k in enumerate(layers):
+      w[f"w{i}"] = d[f"mlp.{k}.weight"].numpy()
+      w[f"b{i}"] = d[f"mlp.{k}.bias"].numpy()
+    np.savez(
+      out,
+      kind="velocity",
+      history=STUDENT_HISTORY,
+      mean=d["obs_normalizer._mean"].numpy()[0],
+      std=d["obs_normalizer._std"].numpy()[0] + eps,
+      default=stance,
+      scale=ACTION_SCALE,
+      lo=[limits[n][0] for n in J],
+      hi=[limits[n][1] for n in J],
+      command_names=list(commands),
+      command_values=np.array(list(commands.values())),
+      **w,
+    )
+
+  n = d["obs_normalizer._mean"].shape[-1]
+  cfg = asdict(load_rl_cfg("Walking-Leap-Motion-Gait-Flat-Student-v0").student)
+  for key in ("class_name", "cnn_cfg", "rnn_type", "rnn_hidden_dim", "rnn_num_layers"):
+    cfg.pop(key)
+  obs = TensorDict({"student": torch.zeros(1, n)}, batch_size=[1])
+  student = MLPModel(obs, {"student": ["student"]}, "student", 16, **cfg)
+  student.load_state_dict(d)
+  student.eval()
+  rng = np.random.default_rng(0)
+  for eps in (1e-2, 0.0):
+    save(eps)
+    P, err = VelocityPolicy(out), []
+    for _ in range(20):
+      o = P.mean + P.std * rng.normal(0, 1.5, P.mean.size)
+      x = TensorDict({"student": torch.tensor(o, dtype=torch.float32)[None]}, [1])
+      with torch.inference_mode():
+        err.append(np.abs(student(x)[0].numpy() - P.net(o)).max())
+    print(f"normalizer eps {eps}: largest difference with rsl-rl's student {max(err):.1e}")
+    if max(err) < 1e-4:
+      break
+  else:
+    print("NOT EQUAL to the student: don't use it")
+    os.remove(out)
+    return 1
+  speeds = ", ".join(
+    f"{k} {v[2] * 57.3:+.0f} deg/s" if v[2] else f"{k} {1e3 * np.abs(v[:2]).max():.0f} mm/s"
+    for k, v in commands.items()
+  )
+  print(f"{out}: {n} inputs ({STUDENT_HISTORY} steps), velocity commands: {speeds}")
+  return 0
+
+
 def main() -> int:
   ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
   ap.add_argument("checkpoint")
-  ap.add_argument("--motion", required=True)
-  ap.add_argument("--clip", required=True)
+  ap.add_argument("--motion", help="motion policies: the clip file it trained on")
+  ap.add_argument("--clip", help="motion policies: the loop's clip it plays along")
   ap.add_argument("--onnx")
   ap.add_argument("--out")
   a = ap.parse_args()
@@ -50,9 +127,12 @@ def main() -> int:
   out = a.out or f"{wlc.POLICIES}/{name}.npz"
   os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
 
-  d = torch.load(a.checkpoint, map_location="cpu", weights_only=False)[
-    "actor_state_dict"
-  ]
+  saved = torch.load(a.checkpoint, map_location="cpu", weights_only=False)
+  if "student_state_dict" in saved:
+    return export_velocity(saved["student_state_dict"], out)
+  if not (a.motion and a.clip):
+    ap.error("a motion policy needs --motion and --clip")
+  d = saved["actor_state_dict"]
   layers = sorted(
     int(m.group(1)) for k in d if (m := re.fullmatch(r"mlp\.(\d+)\.weight", k))
   )

@@ -7,9 +7,9 @@ into a file the loop runs. What it has done so far: [`docs/real_hand.md`](../doc
 ```text
 real/
   wl                 the command (a launcher for wl.py)
-  wl.py              play clips, run a policy in the shadow or live, probe the thumb, list clips
+  wl.py              play clips, run a policy in the shadow or live, steer one, probe the thumb, list clips
   wlc.py             the loop: Hand (the only class that talks to the motors), Recorder, Clip, Control, run()
-  policy.py          an animation policy in plain numpy (89 inputs, or 83 without IMU)
+  policy.py          an animation policy in plain numpy (89 inputs, or 83 without IMU), and a velocity one
   export_policy.py   a checkpoint (+ its ONNX) -> outputs/real/policies/<run>.npz
   imu/               the TM171's reader (tm171.py, standard library only) and `wlimu`, see imu/README.md
 docs/data/real_clips/  the clips the loop plays (joint targets at 50 Hz, what the sim's IMU read)
@@ -154,11 +154,27 @@ command runs clean too (0.021 rad in the shadow). None of this has been on the r
   order; `grav`, the sim IMU's "down" per frame; `meta`: `joint_names`, `fps`, `start` and
   `end` among `lying`, `stand`), starting and ending on the stand within 0.05 rad. Export
   with `--clip <it>`. A converter from mjlab's motion files to this format isn't written.
-- **A walking policy** (`Walking-Leap-Flat-v*`, 57 inputs with a velocity command) doesn't
-  run here yet. It needs a policy class with those inputs and a mode that sends its targets
-  with no clip; the guard that compares the IMU with the clip's "down" has nothing to
-  compare then, so only the tilt guard is left. Train it on the real hand's model
-  (`-Flat-v3`): the walking tasks' nominal hand pushes 0.5 N·m, about three times the cap.
+- **A velocity policy from the keyboard** (the student of
+  `Walking-Leap-Motion-Gait-Flat-Student-v0`, 285 inputs: the command, the IMU, the
+  encoders and its last action over 5 steps): a `steer` step between `stand_up` and
+  `lie_down`.
+
+  ```sh
+  uv run python real/export_policy.py logs/rsl_rl/walking_leap_motion/<student run>/model_<it>.pt
+  real/wl play stand_up steer lie_down --policy <student run>          # shadow: the stance is held
+  real/wl play stand_up steer lie_down --policy <student run> --live   # the policy walks
+  ```
+
+  Arrows move (forward, back, left, right), `,` and `.` turn, the same key again or space
+  stands still, `q` ends: a second standing still, an easy return to the standing pose,
+  then `lie_down`. Each key sends the velocity the student was trained with for that
+  command (in the exported file: forward 28 mm/s, back 20, left 15, right 8, turns
+  19 deg/s). No clip, so the guard comparing the IMU with the clip's "down" is off; the
+  others stay (40° of tilt, current, temperatures, silence, `real/STOP`). The export is
+  checked against rsl-rl's student, the steps on a fake hand (`tests/test_real_loop.py`).
+- **A walking policy** (`Walking-Leap-Flat-v*`, 57 inputs) doesn't run here: its inputs
+  are not the student's. Train it on the real hand's model (`-Flat-v3`): the walking
+  tasks' nominal hand pushes 0.5 N·m, about three times the cap.
 
 ## Logs
 
