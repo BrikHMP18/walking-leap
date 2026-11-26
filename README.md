@@ -97,6 +97,8 @@ docs/
   next_training.md What the next training batch should change, and why
   data/real_clips/ The joint targets the real hand played (50 Hz, with the sim's IMU reading)
 hardware/          The printed parts, latest versions: IMU mount, foot socks (STL, STEP, licences)
+scripts/
+  two_digit_stance.py  Scripted gaits, no learning: the keyboard-steered crawl, two-digit trials
 PLAN.md            Roadmap and verified progress
 AGENTS.md          Conventions for contributors and coding agents
 ```
@@ -178,6 +180,22 @@ uv run play Walking-Leap-Motion-Flat-v1 \
   --motion-file src/walking_leap/assets/clips/hello.npz \
   --checkpoint-file logs/rsl_rl/walking_leap_motion/<date_time>/model_<iteration>.pt
 ```
+
+Steer a scripted crawl from the keyboard (no policy; real hand's model, simulation
+only). In the MuJoCo window the arrows move it forward, back, left and right, `,`
+and `.` turn it, and the same key again stops it:
+
+```sh
+uv run python scripts/two_digit_stance.py --teleop                # the thumb slides along
+uv run python scripts/two_digit_stance.py --teleop --thumb-steps  # going ahead it steps
+```
+
+Each cycle the palm moves over the fingers, then ring, middle and index each step;
+the joint targets come from inverse kinematics, planned from the measured pose. With
+the sliding thumb each of the six commands ran 6 cycles and three mixed sequences of
+5–6 commands ran 15–17 s without a fall; with `--thumb-steps` it walked 6 cycles
+straight ahead but fell in all three sequences, when switching between stepping and
+sliding. The script's docstring lists its other modes (two-digit trials that fall).
 
 ## Checkpoints
 
