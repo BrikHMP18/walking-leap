@@ -1,0 +1,6 @@
+#!/bin/bash
+# real/wl ...: Walking Leap's control loop (see wl.py). WL_PYTHON: a Python with numpy and the hand's
+# driver (dexhw); by default the driver's conda env. ROS's Python paths are kept out.
+here="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+py="${WL_PYTHON:-$HOME/miniconda3/envs/dexhw/bin/python}"
+exec env -u PYTHONPATH PYTHONNOUSERSITE=1 "$py" "$here/wl.py" "$@"

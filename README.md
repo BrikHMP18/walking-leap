@@ -103,6 +103,8 @@ tests/
   test_env.py      mjlab walking environment (GPU if available, else CPU)
   test_motion.py   Animations and the motion-imitation environment
   test_real_runs.py The real hand's recordings, and the simulator replaying one against them
+  test_real_loop.py The real hand's loop: clips, policy inputs in the task's order
+  test_tm171.py    The IMU's reader, without the IMU
 docs/
   real_hand.md     The first runs on the real hand: what ran, sim against real
   handoff.md       Start here: what this branch adds, how to run it, what to train next
@@ -111,6 +113,7 @@ docs/
   data/real_clips/ The joint targets the real hand played (50 Hz, with the sim's IMU reading)
   data/real_runs/  What the real hand recorded in six runs: motors, IMU and the targets sent
 hardware/          The printed parts, latest versions: IMU mount, foot socks (STL, STEP, licences)
+real/              The real hand's control loop, the IMU's reader, a policy's export: start at real/README.md
 scripts/
   scripted_gaits.py    Scripted gaits, no learning: the keyboard-steered crawl, two-digit trials
   gait_clips.py        The crawl's clip per command, tested on 45 random simulated hands
@@ -409,8 +412,8 @@ rsync -av <cluster>:<repository path>/logs/rsl_rl/ logs/rsl_rl/
 ## Tests
 
 ```sh
-uv run pytest                              # 72 tests: 26 robot/physics, 39 clips and environments, 7 real-hand recordings
-CUDA_VISIBLE_DEVICES="" uv run pytest      # CPU only (~2.5 min)
+uv run pytest                              # 83 tests: 26 robot/physics, 39 clips and environments, 18 real hand (recordings, loop, IMU reader)
+CUDA_VISIBLE_DEVICES="" uv run pytest      # CPU only (~5 min)
 uv run ruff check src tests scripts && uv run ruff format --check src tests scripts
 uv run python scripts/render_media.py      # regenerate docs/media/
 ```
