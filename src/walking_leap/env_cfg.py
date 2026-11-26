@@ -3,8 +3,8 @@
   Walking-Leap-Flat-v0        constant forward command (baseline).
   Walking-Leap-Flat-v1        omnidirectional velocity commands.
   Walking-Leap-Flat-NoImu-v1  as v1, actor without the palm-IMU observations.
-  Walking-Leap-Flat-v2        v1 on the real hand's model, rewards only.
-  Walking-Leap-Flat-NoImu-v2  as v2, actor without the palm-IMU observations.
+  Walking-Leap-Flat-v3        v1 on the real hand's model, rewards only.
+  Walking-Leap-Flat-NoImu-v3  as v3, actor without the palm-IMU observations.
 
 Built directly from mjlab managers instead of mjlab's legged velocity template,
 which carries quadruped assumptions (feet, air time, swing height, terrain
@@ -429,7 +429,7 @@ def walking_leap_flat_omni_env_cfg(
 
 
 ##
-# The real hand (v2): the hand as it runs now, from docs/next_training.md: the IMU
+# The real hand (v3): the hand as it runs now, from docs/next_training.md: the IMU
 # on its mount, LEAP's own thumb limits, stock fingertips (no socks), the 350 mA cap
 # (0.181 N*m), the measured stiffness (2.6 N*m/rad) and torsional friction, in the
 # folded-thumb stance it stands up into. No randomization yet (nominal first).
@@ -452,16 +452,27 @@ REAL_YAW_TRACKING_STD = 0.15  # rad/s
 # digit, so steps shorter than that are free.
 LONG_AIR_TIME_S = 1.0
 LONG_AIR_TIME_WEIGHT = -1.0
+# Bounded penalties (v3). The first version (v2) used v1's squared sliding penalty
+# and an uncapped air-time penalty: with the random motion of early training the
+# tips slide fast and the sliding penalty alone reached about -4 per second, more
+# than standing earns (~3.3), so the policy learned to fall within 0.3 s, which
+# ends the episode and the penalty (local 200-iteration run). Here each tip costs
+# at most 1 - exp(-(slip / 1 cm/s)^2) <= 1 and each digit at most 1 s of excess
+# air time: v0's sliding (1.5 cm/s on ~2.4 tips) still costs ~0.43 per second, and
+# the whole penalty never exceeds 0.8 per second.
+REAL_SLIP_PENALTY_WEIGHT = -0.2
+LONG_AIR_TIME_CAP_S = 1.0
 
 
 def walking_leap_flat_real_env_cfg(
   play: bool = False, imu: bool = True
 ) -> ManagerBasedRlEnvCfg:
-  """Omnidirectional walking on the real hand's model, rewards only (v2).
+  """Omnidirectional walking on the real hand's model, rewards only (v3).
 
   v1 (commands, tracking terms, sliding penalty, metrics; ``imu=False`` drops the
   palm-IMU terms from the actor) with the real hand, its joint limits and cap, the
-  slower commands above and the penalty on digits held up.
+  slower commands above, the penalty on digits held up, and both penalties
+  bounded (see REAL_SLIP_PENALTY_WEIGHT).
   """
   cfg = walking_leap_flat_omni_env_cfg(play=play, imu=imu)
   cfg.scene.entities["robot"] = get_leap_hand_cfg(
@@ -483,10 +494,17 @@ def walking_leap_flat_real_env_cfg(
   )
   cfg.rewards["track_lin_vel"].params["std"] = REAL_LIN_VEL_TRACKING_STD
   cfg.rewards["track_ang_vel"].params["std"] = REAL_YAW_TRACKING_STD
+  slip = cfg.rewards["tip_slip"]
+  slip.weight = REAL_SLIP_PENALTY_WEIGHT
+  slip.params["bounded"] = True
   cfg.rewards["long_air_time"] = RewardTermCfg(
     func=mdp.long_air_time,
     weight=LONG_AIR_TIME_WEIGHT,
-    params={"sensor_name": DIGIT_CONTACT, "threshold": LONG_AIR_TIME_S},
+    params={
+      "sensor_name": DIGIT_CONTACT,
+      "threshold": LONG_AIR_TIME_S,
+      "cap": LONG_AIR_TIME_CAP_S,
+    },
   )
   cfg.metrics["actuator_saturation"].params["effort_limit"] = API_EFFORT_LIMIT
   return cfg

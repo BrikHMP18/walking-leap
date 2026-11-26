@@ -107,17 +107,22 @@ def contact_active(
 
 
 def long_air_time(
-  env: ManagerBasedRlEnv, sensor_name: str, threshold: float
+  env: ManagerBasedRlEnv,
+  sensor_name: str,
+  threshold: float,
+  cap: float | None = None,
 ) -> torch.Tensor:
   """Sum over primaries of their time off the secondary beyond ``threshold`` (s).
 
   Zero for steps shorter than ``threshold``; grows for as long as a primary (e.g.
-  a digit) is held up. Needs ``track_air_time=True`` on the sensor.
+  a digit) is held up, up to ``cap`` (s) each if given. A cap keeps the penalty
+  rate bounded, so that ending the episode is never a way out of it. Needs
+  ``track_air_time=True`` on the sensor.
   """
   sensor: ContactSensor = env.scene[sensor_name]
   air = sensor.data.current_air_time
   assert air is not None, f"'{sensor_name}' needs track_air_time=True"
-  return torch.clamp(air - threshold, min=0.0).sum(dim=-1)
+  return torch.clamp(air - threshold, min=0.0, max=cap).sum(dim=-1)
 
 
 ##
@@ -235,15 +240,21 @@ def contact_slip_penalty(
   env: ManagerBasedRlEnv,
   sensor_name: str,
   reference_speed: float,
+  bounded: bool = False,
   asset_cfg: SceneEntityCfg = _ROBOT,
 ) -> torch.Tensor:
   """Sum over primaries in contact of (sliding speed / reference_speed)^2.
 
   Dimensionless; use with a negative weight. Squared so that the sub-mm/s
   vibration of a standing hand costs nothing while dragging is expensive.
+  ``bounded``: 1 - exp(-(speed / reference_speed)^2) instead, at most 1 per
+  primary, so that the fast sliding of early, random motion cannot make ending
+  the episode the best way out of the penalty.
   """
   speed, in_contact = _contact_slip(env, sensor_name, asset_cfg)
-  return (in_contact * torch.square(speed / reference_speed)).sum(dim=-1)
+  ratio = torch.square(speed / reference_speed)
+  per_primary = 1.0 - torch.exp(-ratio) if bounded else ratio
+  return (in_contact * per_primary).sum(dim=-1)
 
 
 def actuator_saturation(

@@ -54,10 +54,10 @@ for version, robust in (("v0", False), ("v1", True)):
 
 # The real hand as it runs now (IMU, stock fingertips, 350 mA, measured stiffness,
 # torsional friction), with and without the palm IMU in the actor: walking from
-# rewards only (Flat-v2) and imitating the real crawl (Motion-Crawl-Flat-v0).
+# rewards only (Flat-v3; v2 had unbounded penalties and learned to fall) and imitating the real crawl (Motion-Crawl-Flat-v0).
 for variant, imu in (("", True), ("-NoImu", False)):
   register_mjlab_task(
-    task_id=f"Walking-Leap-Flat{variant}-v2",
+    task_id=f"Walking-Leap-Flat{variant}-v3",
     env_cfg=walking_leap_flat_real_env_cfg(imu=imu),
     play_env_cfg=walking_leap_flat_real_env_cfg(play=True, imu=imu),
     rl_cfg=walking_leap_real_ppo_runner_cfg(),

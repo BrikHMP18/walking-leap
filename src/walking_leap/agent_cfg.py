@@ -62,7 +62,7 @@ def walking_leap_motion_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
 
 
 def walking_leap_real_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
-  """Walking on the real hand's model, rewards only (v2): 6000 iterations, as
+  """Walking on the real hand's model, rewards only (v3): 6000 iterations, as
   IMU-free locomotion was trained for 5000 in Bhatt et al., "Blind Dexterity"
   (arXiv:2608.29487), with some margin."""
   return replace(walking_leap_ppo_runner_cfg(), max_iterations=6_000)

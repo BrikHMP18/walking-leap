@@ -214,9 +214,11 @@ def test_gait_metrics(env):
   for body in robot.FINGERTIP_BODIES:
     rate = mdp.contact_slip_rate(env, TIP_CONTACT, primary=body)
     assert torch.allclose(rate, torch.full_like(rate, 0.3), atol=2e-3)
-  # Four pads at 30 times the reference speed: 4 * 30^2.
+  # Four pads at 30 times the reference speed: 4 * 30^2, or 4 * 1 when bounded.
   penalty = mdp.contact_slip_penalty(env, TIP_CONTACT, 0.01)
   assert torch.allclose(penalty, torch.full_like(penalty, 3600.0), rtol=2e-2)
+  bounded = mdp.contact_slip_penalty(env, TIP_CONTACT, 0.01, bounded=True)
+  assert torch.allclose(bounded, torch.full_like(bounded, 4.0), atol=1e-3)
 
   # Spin about the palm's vertical axis: each pad slides at w * horizontal
   # distance from the palm origin, so the mean is w times the mean distance.
@@ -307,11 +309,11 @@ def test_tracking_error_metrics(no_imu_env):
 
 
 ##
-# The real hand (v2): rewards only, with and without the palm IMU.
+# The real hand (v3): rewards only, with and without the palm IMU.
 ##
 
-REAL_TASK = "Walking-Leap-Flat-v2"
-REAL_NO_IMU_TASK = "Walking-Leap-Flat-NoImu-v2"
+REAL_TASK = "Walking-Leap-Flat-v3"
+REAL_NO_IMU_TASK = "Walking-Leap-Flat-NoImu-v3"
 
 
 def test_real_hand_tasks():
@@ -328,6 +330,11 @@ def test_real_hand_tasks():
     assert cfg.metrics["actuator_saturation"].params["effort_limit"] == (
       robot.API_EFFORT_LIMIT
     )
+    # Both penalties bounded, so falling is never a way out of them (v2 learned
+    # to fall within 0.3 s with v1's squared sliding penalty).
+    assert cfg.rewards["tip_slip"].params["bounded"] is True
+    assert cfg.rewards["long_air_time"].params["cap"] is not None
+  assert "bounded" not in v1.rewards["tip_slip"].params  # v1 trains as before
 
 
 def test_long_air_time_counts_only_beyond_the_threshold():
@@ -336,3 +343,5 @@ def test_long_air_time_counts_only_beyond_the_threshold():
   env = types.SimpleNamespace(scene={"s": types.SimpleNamespace(data=data)})
   penalty = mdp.long_air_time(env, "s", threshold=1.0)
   assert torch.allclose(penalty, torch.tensor([1.5, 2.0]))
+  capped = mdp.long_air_time(env, "s", threshold=1.0, cap=1.0)
+  assert torch.allclose(capped, torch.tensor([1.0, 1.0]))

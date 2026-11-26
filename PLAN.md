@@ -146,10 +146,12 @@ The trainings below that are checked come from a branch, not from this milestone
 - [ ] IMU ablation: `Walking-Leap-Flat-NoImu-v1` (actor without palm IMU, 51
       dims; `test_no_imu_actor_keeps_privileged_critic`) against v1, 3 seeds
       each: tracking errors, falls, slip
-- [ ] Real hand, rewards only (`Walking-Leap-Flat-v2`, `-NoImu-v2`): v1 on the real
+- [ ] Real hand, rewards only (`Walking-Leap-Flat-v3`, `-NoImu-v3`): v1 on the real
       hand's model with slower commands and `long_air_time` (no digit up for more
-      than 1 s; `test_long_air_time_counts_only_beyond_the_threshold`,
-      `test_real_hand_tasks`). Train 2 seeds each, 6000 iterations; compare with and
+      than 1 s), both penalties bounded
+      (`test_long_air_time_counts_only_beyond_the_threshold`, `test_real_hand_tasks`).
+      v2 had v1's unbounded sliding penalty and learned to fall within 0.3 s (local
+      200-iteration run); its two cluster jobs were cancelled. Train 2 seeds each, 6000 iterations; compare with and
       without IMU: tracking errors, falls, thumb sliding (`tip_slip_rate_th`), and
       survival under pushes as in Bhatt et al., "Blind Dexterity" (arXiv:2608.29487)
 - [ ] Imitate the real crawl (`Walking-Leap-Motion-Crawl-Flat-v0`, `-NoImu-v0`):
