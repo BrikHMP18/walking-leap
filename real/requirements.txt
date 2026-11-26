@@ -1,0 +1,6 @@
+# The loop's own Python (real/setup makes real/.venv from this list): the driver, the IMU's
+# reader, the policy in numpy, the panel. dynamixel-sdk below 3.9, as the driver was tried with.
+numpy>=1.24
+pyyaml>=6
+pyserial>=3.5
+dynamixel-sdk>=3.7.31,<3.9

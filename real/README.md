@@ -8,8 +8,9 @@ so far: [`docs/real_hand.md`](../docs/real_hand.md).
 
 ```text
 real/
+  setup              once per PC: the loop's own small Python, real/.venv (requirements.txt)
   wl                 the command (a launcher for wl.py)
-  wl.py              play clips, run a policy in the shadow or live, steer one, probe the thumb, list clips
+  wl.py              play clips, run a policy in the shadow or live, steer one, probe the thumb, list clips, scan
   wlc.py             the loop: Hand (the only class that talks to the motors), Recorder, Clip, Control, run()
   policy.py          an animation policy in plain numpy (89 inputs, or 83 without IMU), and a velocity one
   export_policy.py   a checkpoint (+ its ONNX) -> outputs/real/policies/<run>.npz
@@ -17,6 +18,7 @@ real/
   twin.py            the loop driving a simulated hand instead of the motors (MuJoCo, CPU)
   make_clip.py       a clips.py motion file -> a clip the loop plays (real/clips/)
   clips/             the panel's moves (one cycle each) and emotes: planned, not yet played on the hand
+  leap_hand/         the LEAP hand's driver: the motors' loop, its fake, the rig file, a read-only scan
   imu/               the TM171's reader (tm171.py, standard library only) and `wlimu`, see imu/README.md
 docs/data/real_clips/  the clips the real hand played (joint targets at 50 Hz, what the sim's IMU read)
 outputs/real/          policies/, logs/, imu/ (git-ignored)
@@ -29,53 +31,43 @@ outputs/real/          policies/, logs/, imu/ (git-ignored)
   0.18 N·m): the as-built model's actuator cap.
 - The TM171 on the back of the hand (`hardware/imu_mount/`), on USB, 400 readings a second,
   read in the palm's axes (the simulation's: x to the fingertips, y to the thumb, z up).
-- A Linux PC next to the hand runs the loop. The motors go through **dexhw**, the LEAP
-  driver installed on that PC (Mathias'; not in this repo): it sets the mode, the 350 mA,
-  the joint limits and a 0.5 s watchdog at every connect. The loop uses its conda env
-  (`WL_PYTHON` to choose another Python). Gains 1200/0/600 by default.
+- A Linux PC next to the hand runs the loop. The motors go through the driver in
+  `leap_hand/`: at every connect it sets the mode, the 350 mA, the gains (1200/0/600 by
+  default), the joint limits and a 0.5 s watchdog, and it turns torque off on every way
+  out. The loop runs in its own small Python, `real/.venv` (`real/setup`; `WL_PYTHON` to
+  choose another one).
 - The policy runs in numpy on that PC's CPU, 50 times a second. No torch, no GPU there.
 
-## Running it from your own laptop
+## Running it on another PC (a laptop)
 
-Any Linux x86-64 PC with Python 3.10 or newer: the loop needs numpy and the hand's driver,
-no GPU. Tried from scratch on a lab PC (Ubuntu, Python 3.12, uv): the steps below up to
-the `--fake` run, clean. **Not tried yet with the hand plugged into a laptop.**
+Any Linux x86-64 PC with Python 3.10 or newer, no GPU: everything is in this repo. The
+hand's PC runs it this way; a laptop is set up the same.
 
 1. The repo as usual (`uv sync`): it's what `export_policy.py` and the tests run in.
-2. The driver: dexhw isn't public, get a copy from Mathias (a folder with `pyproject.toml`
-   and `rigs/leap_right.yaml`).
-3. A Python for the loop, apart from the repo's (the paths are examples):
-
-   ```sh
-   uv venv ~/.venvs/leap-hand --python 3.12
-   uv pip install --python ~/.venvs/leap-hand/bin/python numpy /path/to/dexhw
-   export WL_PYTHON=~/.venvs/leap-hand/bin/python             # in your shell's rc
-   export WL_RIG=/path/to/dexhw/rigs/leap_right.yaml
-   ```
-
-4. Without the hand: `real/wl play stand_up crawl lie_down --policy <run> --fake` must end
-   with `torque off. OK`.
-5. The ports, once. Your user in `dialout` (the U2D2 and the IMU), and the U2D2's USB
+2. The loop's Python, once: `real/setup` (real/.venv: numpy, pyyaml, pyserial,
+   dynamixel-sdk; with uv if you have it).
+3. Without the hand: `real/wl play stand_up crawl lie_down --fake` must end with
+   `torque off. OK` (add `--policy <run>` for a policy).
+4. The ports, once. Your user in `dialout` (the U2D2 and the IMU), and the U2D2's USB
    latency at 1 ms instead of the kernel's 16 (the driver reads 16 motors 100 times a
    second):
 
    ```sh
    sudo usermod -aG dialout $USER        # then log out and in
-   echo 'SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6014", ENV{ID_MM_DEVICE_IGNORE}="1", ATTR{device/latency_timer}="1"' \
-     | sudo tee /etc/udev/rules.d/99-leap-u2d2.rules
+   echo 'SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6014", ENV{ID_MM_DEVICE_IGNORE}="1", ATTR{device/latency_timer}="1"'      | sudo tee /etc/udev/rules.d/99-leap-u2d2.rules
    sudo udevadm control --reload-rules && sudo udevadm trigger
    cat /sys/bus/usb-serial/devices/ttyUSB*/latency_timer   # with the U2D2 plugged: 1
    ```
 
-   The rig finds the U2D2 by its serial number (`/dev/serial/by-id/`), and `tm171.py` finds
-   the IMU by its name, so nothing else changes from one PC to another.
-6. The first time on the hand, with Mathias, nothing moving: the U2D2 and the IMU
-   unplugged from the other PC and into yours, the hand powered, then
-   `$WL_PYTHON /path/to/dexhw/scripts/leap_scan.py --rig $WL_RIG` (read only: all 16
-   answer, torque off) and `real/imu/wlimu check` (400 readings a second, none lost;
-   close it after). Then the scripts or a policy as below. At the end of every run the
-   loop says how late it ran: on the hand's PC typically under 1 ms; keep the laptop on
-   its charger.
+   The driver finds the U2D2 by itself (the one FTDI adapter under `/dev/serial/by-id/`;
+   `WL_LEAP_PORT` to name it), and `tm171.py` finds the IMU by its name, so nothing changes
+   from one PC to another.
+5. The first time on the hand, with Mathias, nothing moving: the U2D2 and the IMU
+   unplugged from the other PC and into yours, the hand powered, then `real/wl scan`
+   (read only: all 16 answer, torque off) and `real/imu/wlimu check` (400 readings a
+   second, none lost; close it after). Then the scripts or a policy as below. At the end
+   of every run the loop says how late it ran: on the hand's PC typically under 1 ms; keep
+   the laptop on its charger.
 
 ## The control panel
 
@@ -247,10 +239,15 @@ All joints in the repo's order (`wlc.JOINT_NAMES`); the motors' IDs are
 `wlc.MOTOR_OF`. Six of these logs are in `docs/data/real_runs/`, with a test that replays
 one in the simulator (`tests/test_real_runs.py`).
 
-## Another driver
+## The driver
 
-`Hand` in `wlc.py` is the only place that knows the driver. Another one (for instance on
-LEAP's public `LEAP_Hand_API`) fits if it keeps `Hand`'s methods (`with`, `read`,
-`target`, `hold`, `temps`, `lo`, `hi`, `h.stats`) and, before torque, puts every motor in
-current-based position mode (5) with a 350 mA limit. LEAP's own example uses 550 mA for
-this motor: not here.
+`leap_hand/` is the only code that drives the motors, and `Hand` in `wlc.py` the only place
+in the loop that uses it. At connect: torque off, current-based position mode (5), the
+gains (the side-to-side knuckles at 0.75 of them), Goal Current 350 mA, the goal set to
+where the hand is, then torque on, so connecting doesn't move it. Then a 100 Hz loop: the
+setpoint moves at most 0.05 rad a tick, a 0.5 s watchdog holds when no target comes, the
+motors' error flags are read every 10 ticks, five failed ticks in a row stop it. Torque
+goes off on disconnect, at the end of a `with`, at exit and on a signal. Every number is
+in `leap_hand/leap_right.yaml`; `tests/test_leap_hand.py` runs the whole loop on the fake
+servos. `leap_hand/third_party/` is CMU's LEAP_Hand_API, unmodified (CC BY-NC 4.0). LEAP's
+own example uses 550 mA for this motor: not here.

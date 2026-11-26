@@ -4,9 +4,9 @@ Joint order everywhere here: the repo's (JOINT_NAMES below). Only `Hand` knows t
 Angles in rad (0 = flat hand, + closes to the palm), gravity and gyro in the palm's axes (x to the
 fingertips, y to the thumb side, z up), as in the simulation.
 
-The motors are driven through `Hand`, the only class that talks to them. It uses dexhw, the LEAP
-driver of the lab's hand PC (not part of this repo). Another driver fits if it keeps `Hand`'s methods
-and, like dexhw, puts the motors in current-based position mode (5) with a 350 mA limit before torque.
+The motors are driven through `Hand`, the only class here that talks to them. It uses the repo's
+LEAP driver, `leap_hand/` (its rig file `leap_hand/leap_right.yaml`): current-based position mode (5)
+with a 350 mA limit before torque, the joint limits, a 0.5 s watchdog, torque off on every way out.
 """
 
 # ruff: noqa: B905
@@ -23,9 +23,10 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
+sys.path.insert(0, HERE)
 sys.path.insert(0, HERE + "/imu")
 # The driver's settings for this hand (its limits, the 350 mA, the watchdog); the gains are set below.
-RIG = os.environ.get("WL_RIG", os.path.expanduser("~/dexhw/rigs/leap_right.yaml"))
+RIG = os.environ.get("WL_RIG", HERE + "/leap_hand/leap_right.yaml")
 STOP = HERE + "/STOP"
 # Where clips are looked for, in order: the panel's moves and emotes, then the ones the real
 # hand has played (WL_CLIPS: one more folder, looked in first).
@@ -78,25 +79,25 @@ def ease(u):
 
 # ---------------------------------------------------------------------------- the hand
 class Hand:
-  """dexhw's LeapHand (or its fake) in the repo's joint order. 350 mA, its limits, its watchdog.
+  """The driver's LeapHand (or its fake) in the repo's joint order. 350 mA, its limits, its watchdog.
 
   What the loop uses: connect and disconnect (`with`), read() -> state (t, hw_error), q, dq, current in
   mA and the target sent, all in the repo's order; target(q); hold(); temps(); lo and hi; h.stats.
   """
 
   def __init__(self, gains=(1200, 0, 600), fake=False, q0=None, probe=False):
-    from dexhw.leap.config import load_rig
+    from leap_hand.config import load_rig
 
     cfg = dataclasses.replace(load_rig(RIG).hand, kp=gains[0], ki=gains[1], kd=gains[2])
     assert cfg.current_limit_ma == 350, "the current limit is 350 mA"
     self.cfg, self.gains, self.fake = cfg, gains, fake
     if fake:
-      from dexhw.leap.fake import FakeLeapHand
+      from leap_hand.fake import FakeLeapHand
 
       b = None if q0 is None else np.asarray(q0)[JOINT_OF]
       self.h = FakeLeapHand(cfg, q0=b)
     else:
-      from dexhw.leap.hand import LeapHand
+      from leap_hand.hand import LeapHand
 
       self.h = LeapHand(cfg)
     self.lo, self.hi = self.h.lower[MOTOR_OF].copy(), self.h.upper[MOTOR_OF].copy()
@@ -128,7 +129,7 @@ class Hand:
     """Motor temperatures (C), read by the hand's own loop between two ticks."""
     if self.fake:
       return np.full(16, 25.0)
-    from dexhw.leap.third_party.leap_hand_utils import dynamixel_client as dxc
+    from leap_hand.third_party.leap_hand_utils import dynamixel_client as dxc
 
     out = {}
 
@@ -584,7 +585,7 @@ def run(
   elif fake:
     imu, hand = FakeImu(), Hand(gains, True, clips[0].q[0])
   else:
-    from dexhw.leap.hand import raise_on_signals
+    from leap_hand.hand import raise_on_signals
     from tm171 import TM171
 
     raise_on_signals()

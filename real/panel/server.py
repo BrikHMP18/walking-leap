@@ -518,7 +518,7 @@ def main() -> int:
   )
   session = Session(kind, gains, policies)
   if kind == "real":
-    from dexhw.leap.hand import raise_on_signals
+    from leap_hand.hand import raise_on_signals
 
     raise_on_signals()
   server = ThreadingHTTPServer((a.host, a.port), handler(session, info))

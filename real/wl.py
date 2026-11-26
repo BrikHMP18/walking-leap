@@ -7,7 +7,8 @@
   real/wl play ... --fake                       # the driver's simulated motors and a level IMU: no hardware
   real/wl play stand_up steer lie_down --policy NAME [--live]   # a velocity policy, from the keyboard
   real/wl thumb                                 # lying: where does the thumb stop? (one joint at a time)
-  real/wl list                                  # the clips (docs/data/real_clips/)
+  real/wl list                                  # the clips (real/clips/, docs/data/real_clips/)
+  real/wl scan                                  # read only: do all 16 motors answer? (nothing written)
   touch real/STOP                               # stop: lies down if it can, then torque off
 
 NAME: a file of outputs/real/policies/ (export_policy.py), or a path to one.
@@ -26,7 +27,7 @@ import wlc
 
 def thumb(gains):
   """Each thumb joint alone, slowly, towards its lower limit, while lying. Stops at 300 mA."""
-  from dexhw.leap.hand import raise_on_signals
+  from leap_hand.hand import raise_on_signals
   from tm171 import TM171
 
   raise_on_signals()
@@ -81,8 +82,12 @@ def thumb(gains):
 
 
 def main():
+  if sys.argv[1:2] == ["scan"]:
+    from leap_hand import scan
+
+    return scan.main(sys.argv[2:])
   ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-  ap.add_argument("what", choices=["play", "thumb", "list"])
+  ap.add_argument("what", choices=["play", "thumb", "list", "scan"])
   ap.add_argument("clips", nargs="*")
   ap.add_argument("--gains", default="1200,0,600")
   ap.add_argument("--speed", type=float, default=1.0)

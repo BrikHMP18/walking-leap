@@ -1,0 +1,30 @@
+# The right LEAP hand on its U2D2 adapter. Every number that reaches the motors is here.
+# Keys are the fields of leap_hand.config.LeapHandConfig; an unknown key is an error.
+# The loop (wlc.Hand) replaces the gains with its own (1200/0/600 by default) and checks
+# that the current limit is 350 mA.
+name: leap_right
+
+hand:
+  # auto: $WL_LEAP_PORT if set, else the one FTDI adapter under /dev/serial/by-id/ (the U2D2).
+  port: auto
+  baudrate: 4000000             # this hand's firmware setting, also the SDK default
+  motor_ids: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+  # Servo gains, the SDK's LeapNode values (Position P/I/D Gain registers 84/82/80).
+  kp: 600
+  ki: 0
+  kd: 200
+  abduction_gain_scale: 0.75    # kp and kd on IDs 0, 4, 8, as in LeapNode
+  current_limit_ma: 350         # Goal Current (102); LEAP's own example uses 550: not here
+  current_unit_ma: 1.0          # XC330-M288-T: 1 mA per unit
+  return_delay_time: 0          # register 9 (EEPROM); factory 250 = 500 us per motor, 8 ms per
+                                # sync read over 16 motors (plain sync read 12 ms -> 2 ms at 0).
+  packet_timeout_ms: 3          # beyond the transmission time; a full read arrives within
+                                # 2.2 ms, a stalled chained read then costs 3.6 ms, not the SDK's
+                                # 35, and stall + 5 ms back-off + retry still fits one tick.
+  control_hz: 100.0
+  max_step_rad: 0.05            # per-tick change of the commanded setpoint
+  watchdog_s: 0.5               # no new target for this long -> hold (torque stays on)
+  comm_error_limit: 5           # consecutive failed ticks before the loop stops, torque off
+  hw_error_check_every: 10      # ticks between Hardware_Error_Status reads
+  # limits_rad: 16 [lower, upper] pairs in canonical radians (0 = flat). Omitted: the SDK's
+  # LEAPsim_limits(). A rig may tighten the SDK limits, never widen them.

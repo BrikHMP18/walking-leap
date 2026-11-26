@@ -1,6 +1,10 @@
 #!/bin/bash
-# real/panel/run [--fake]: the control panel in the hand driver's env (see server.py). WL_PYTHON:
-# a Python with numpy and the driver; by default the driver's conda env. ROS's paths kept out.
+# real/panel/run [--fake]: the control panel (see server.py), in the loop's own Python: real/.venv
+# (made once by real/setup), or WL_PYTHON. ROS's Python paths are kept out.
 here="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
-py="${WL_PYTHON:-$HOME/miniconda3/envs/dexhw/bin/python}"
+py="${WL_PYTHON:-$here/../.venv/bin/python}"
+if [ ! -x "$py" ]; then
+  echo "no Python for the panel at $py: run real/setup once (or set WL_PYTHON)" >&2
+  exit 1
+fi
 exec env -u PYTHONPATH PYTHONNOUSERSITE=1 "$py" "$here/server.py" "$@"
