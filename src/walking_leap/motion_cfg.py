@@ -185,7 +185,9 @@ def walking_leap_motion_env_cfg(
     "motion": MotionCommandCfg(
       entity_name="robot",
       resampling_time_range=(1.0e9, 1.0e9),
-      debug_vis=True,
+      # Off: mjlab draws the clip as a translucent green "ghost" hand over the real
+      # one. Drawing only (no physics, training unchanged); set True to see it.
+      debug_vis=False,
       motion_file=str(CLIPS_DIR / f"{clip}.npz"),
       anchor_body_name=ROOT_BODY,
       body_names=tracked,
