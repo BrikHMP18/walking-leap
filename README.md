@@ -105,7 +105,7 @@ scripts/
   scripted_gaits.py    Scripted gaits, no learning: the keyboard-steered crawl, two-digit trials
   gait_clips.py        The crawl's clip per command, tested on 45 random simulated hands
   render_media.py      Renders the README images/GIFs into docs/media/
-  crawl_loop.py        A 40-cycle crawl clip, to watch a crawl policy keep going
+  eval_velocity.py     Fixed velocity commands: how far each policy goes, or watch one
 PLAN.md            Roadmap and verified progress
 AGENTS.md          Conventions for contributors and coding agents
 ```
@@ -263,29 +263,22 @@ uv run play Walking-Leap-Motion-Crawl-Flat-v0 --viewer native \
   --checkpoint-file outputs/hf/runs/2026-11-26_01-55-17_Walking-Leap-Motion-Crawl-Flat-v0_s42/model_2999.pt
 ```
 
-That clip is the training one: three cycles (28 s), then mjlab puts the hand back
-at the start. To watch a crawl policy keep going, make a 40-cycle clip (6.2 min;
-`--cycles` changes it) and play it instead:
-
-```sh
-uv run python scripts/crawl_loop.py   # writes outputs/clips/crawl_loop.npz
-uv run play Walking-Leap-Motion-Crawl-Flat-v0 --viewer native --num-envs 1 \
-  --motion-file outputs/clips/crawl_loop.npz \
-  --checkpoint-file outputs/hf/runs/2026-11-26_01-55-17_Walking-Leap-Motion-Crawl-Flat-v0_s42/model_2999.pt
-```
-
-It repeats one cycle of the real six-cycle crawl, replayed open loop on the real
-hand's model as `crawl.npz` is. In that replay the palm stays 126–128 mm high and
-within 4.3° of level and moves 34.4–34.8 mm a cycle, 1.4 m in all, turning 56°. The
-policies see only the clip's joints and gravity, which repeat every cycle, but they
-never trained on more than 28 s in a row: whether they keep going is what this
-shows. An episode still ends if the palm's height or tilt leaves the clip's. The
-clip's translucent "ghost" hand is not drawn (`debug_vis` in `motion_cfg.py`).
+The clip's translucent "ghost" hand is not drawn (`debug_vis` in `motion_cfg.py`).
 
 `outputs/` is git-ignored. Play a checkpoint with the task it was trained on
 (recorded in its `params/`). In the viewer, the dark-blue arrow is the
-commanded velocity and the cyan one the actual velocity; `Space` pauses,
-`Enter` resets and `R` hides or shows those drawings.
+commanded velocity and the cyan one the actual velocity; the green vertical
+ones are the commanded and actual turning rates (up: to the left). `Space`
+pauses, `Enter` resets and `R` hides or shows those drawings.
+
+Velocity policies can also be measured with fixed commands at the edges of
+their task's range (forward, back, both sides, both turns, zero; 16 episodes
+each, next to a hand that stands still), or watched holding one of them:
+
+```sh
+uv run python scripts/eval_velocity.py outputs/hf/runs/<run> [<run> ...]  # table, outputs/eval/
+uv run python scripts/eval_velocity.py outputs/hf/runs/<run> --view --command forward
+```
 
 ## Training on an Alliance Canada cluster
 
