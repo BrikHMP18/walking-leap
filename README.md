@@ -80,12 +80,14 @@ tests/
   test_as_built.py The same for the hand with its parts
   test_env.py      mjlab walking environment (GPU if available, else CPU)
   test_motion.py   Animations and the motion-imitation environment
+  test_real_runs.py The real hand's recordings, and the simulator replaying one against them
 docs/
   render_media.py  Renders the README images/GIFs into docs/media/
   real_hand.md     The first runs on the real hand: what ran, sim against real
   handoff.md       Start here: what this branch adds, how to run it, what to train next
   next_training.md What the next training batch should change, and why
   data/real_clips/ The joint targets the real hand played (50 Hz, with the sim's IMU reading)
+  data/real_runs/  What the real hand recorded in six runs: motors, IMU and the targets sent
 hardware/          The printed parts, latest versions: IMU mount, foot socks (STL, STEP, licences)
 PLAN.md            Roadmap and verified progress
 AGENTS.md          Conventions for contributors and coding agents
@@ -281,7 +283,7 @@ rsync -av <cluster>:<repository path>/logs/rsl_rl/ logs/rsl_rl/
 ## Tests
 
 ```sh
-uv run pytest                              # 46 tests: 23 robot/physics, 23 clips and environments
+uv run pytest                              # 53 tests: 23 robot/physics, 23 clips and environments, 7 real-hand recordings
 CUDA_VISIBLE_DEVICES="" uv run pytest      # CPU only (~45 s)
 uv run ruff check src tests docs && uv run ruff format --check src tests docs
 uv run python docs/render_media.py         # regenerate docs/media/
