@@ -107,13 +107,32 @@ random simulated hands. The steering policy (W S Q E) corrected that in the earl
 A and D aren't in any trained policy yet. None of the moves or the new emotes has run on
 the real hand.
 
-Policies for it, exported with `--tracker` (one policy, several clips):
+### Your own policy on the panel
 
-```sh
-uv run python real/export_policy.py <run>/model_5999.pt --tracker   --clips step_forward step_back turn_left turn_right --onnx <run>/<run>.onnx --out outputs/real/policies/steering.npz
-```
+1. **Export it,** on any machine with the repo (`uv sync` done). One clip: `--motion` and
+   `--clip`, as in "Deploying a trained crawl" below. Several clips, one policy (a
+   tracker), here the four steering moves:
 
-The moves were written with the `clips.py` of PR #1's branch, not merged yet (`crawl`,
+   ```sh
+   uv run python real/export_policy.py <run>/model_<iteration>.pt --onnx <run>/<run>.onnx \
+     --tracker --clips step_forward step_back turn_left turn_right --out outputs/real/policies/<name>.npz
+   ```
+
+   It refuses to keep the file if the numpy copy differs from the ONNX.
+2. **Copy the file** into `outputs/real/policies/` of the repo's clone on the hand's PC:
+   `scp outputs/real/policies/<name>.npz <hand PC>:<the clone>/outputs/real/policies/`.
+3. **Restart the panel** there (Ctrl-C, then `real/panel/run`): it reads that folder when
+   it starts. To try it without the hand first: `real/panel/run --fake`, or `--twin`
+   anywhere the repo runs.
+4. **Pick it in the dropdown.** The green dots show the moves and emotes it drives (the
+   clips it was trained on, by name); the others play as written. Shadow first, then
+   Live, with Mathias there.
+
+A velocity student (`kind` "velocity", the `steer` step) isn't on the panel yet: the panel
+skips it at start and says so. It runs with `real/wl play stand_up steer lie_down --policy
+<run>` ("Other policies").
+
+The moves were written with clip functions not in `main` yet (`crawl`,
 `backwards`, `turn`, and a sideways crawl:
 the turn's cycle with a shift instead of a turn, the leading finger first, 8 mm a cycle;
 at 10 mm the step right leaves under 3 mm of balance margin), then `make_clip.py`. The 3D
