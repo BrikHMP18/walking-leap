@@ -98,7 +98,8 @@ docs/
   data/real_clips/ The joint targets the real hand played (50 Hz, with the sim's IMU reading)
 hardware/          The printed parts, latest versions: IMU mount, foot socks (STL, STEP, licences)
 scripts/
-  two_digit_stance.py  Scripted gaits, no learning: the keyboard-steered crawl, two-digit trials
+  scripted_gaits.py    Scripted gaits, no learning: the keyboard-steered crawl, two-digit trials
+  crawl_loop.py        A 40-cycle crawl clip, to watch a crawl policy keep going
 PLAN.md            Roadmap and verified progress
 AGENTS.md          Conventions for contributors and coding agents
 ```
@@ -186,8 +187,8 @@ only). In the MuJoCo window the arrows move it forward, back, left and right, `,
 and `.` turn it, and the same key again stops it:
 
 ```sh
-uv run python scripts/two_digit_stance.py --teleop                # the thumb slides along
-uv run python scripts/two_digit_stance.py --teleop --thumb-steps  # going ahead it steps
+uv run python scripts/scripted_gaits.py --teleop                # the thumb slides along
+uv run python scripts/scripted_gaits.py --teleop --thumb-steps  # going ahead it steps
 ```
 
 Each cycle the palm moves over the fingers, then ring, middle and index each step;
@@ -255,10 +256,29 @@ uv run play Walking-Leap-Motion-Crawl-Flat-v0 --viewer native \
   --checkpoint-file outputs/hf/runs/2026-11-26_01-55-17_Walking-Leap-Motion-Crawl-Flat-v0_s42/model_2999.pt
 ```
 
+That clip is the training one: three cycles (28 s), then mjlab puts the hand back
+at the start. To watch a crawl policy keep going, make a 40-cycle clip (6.2 min;
+`--cycles` changes it) and play it instead:
+
+```sh
+uv run python scripts/crawl_loop.py   # writes outputs/clips/crawl_loop.npz
+uv run play Walking-Leap-Motion-Crawl-Flat-v0 --viewer native --num-envs 1 \
+  --motion-file outputs/clips/crawl_loop.npz \
+  --checkpoint-file outputs/hf/runs/2026-11-26_01-55-17_Walking-Leap-Motion-Crawl-Flat-v0_s42/model_2999.pt
+```
+
+It repeats one cycle of the real six-cycle crawl, replayed open loop on the real
+hand's model as `crawl.npz` is. In that replay the palm stays 126–128 mm high and
+within 4.3° of level and moves 34.4–34.8 mm a cycle, 1.4 m in all, turning 56°. The
+policies see only the clip's joints and gravity, which repeat every cycle, but they
+never trained on more than 28 s in a row: whether they keep going is what this
+shows. An episode still ends if the palm's height or tilt leaves the clip's. The
+clip's translucent "ghost" hand is not drawn (`debug_vis` in `motion_cfg.py`).
+
 `outputs/` is git-ignored. Play a checkpoint with the task it was trained on
 (recorded in its `params/`). In the viewer, the dark-blue arrow is the
-commanded velocity and the cyan one the actual velocity; `Space` pauses and
-`R` resets.
+commanded velocity and the cyan one the actual velocity; `Space` pauses,
+`Enter` resets and `R` hides or shows those drawings.
 
 ## Training on an Alliance Canada cluster
 

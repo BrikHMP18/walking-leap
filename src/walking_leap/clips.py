@@ -309,14 +309,18 @@ class RealHand:
     self.data = mujoco.MjData(self.model)
 
 
-def replay(name: str, hand: RealHand, settle_s: float = 0.5) -> Motion:
+def replay(
+  name: str, hand: RealHand, settle_s: float = 0.5, q: np.ndarray | None = None
+) -> Motion:
   """A real clip's joint targets, played open loop from the folded-thumb stance.
 
   One row per target (50 Hz): the state when that target is sent. The stance is
   settled first, with the clip's first targets. ``lifted`` and ``ik_error`` do not
-  apply (no planted-feet solve) and are left empty.
+  apply (no planted-feet solve) and are left empty. ``q`` (frames x 16, rad) plays
+  these targets instead of the named clip's.
   """
-  q = np.load(REAL_CLIPS_DIR / f"{name}.npz")["q"]
+  if q is None:
+    q = np.load(REAL_CLIPS_DIR / f"{name}.npz")["q"]
   m, d = hand.model, hand.data
   mujoco.mj_resetDataKeyframe(m, d, m.key("init_state").id)
   d.qpos[7:] = q[0]

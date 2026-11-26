@@ -1,35 +1,34 @@
-"""Can the real hand stand on two digits? A posture search, then a physics test.
-
-  uv run python scripts/two_digit_stance.py                # middle finger + thumb
-  uv run python scripts/two_digit_stance.py --pair rf th   # another pair
-  uv run python scripts/two_digit_stance.py --view         # watch it in MuJoCo
-  uv run python scripts/two_digit_stance.py --pair if mf --free --max-pitch 1.6
-      # stand up on index + middle: the tips may move, the palm may tilt far
+"""Scripted gaits on the real hand's model: simulation only, no learning.
 
 Model: the real hand as it runs now (IMU, stock fingertips, LEAP's thumb limits,
 350 mA cap, stiffness 2.6 N*m/rad, torsional friction), from the folded-thumb stance.
+Joint targets come from inverse kinematics plus the servos' static sag and are played
+by the position servos.
 
-1. Posture (kinematics, least squares over the palm pose and the 16 joints): the two
-   chosen tips stay planted where they stand in the four-digit stance, the other two
-   are lifted by at least LIFT, the centre of mass lies on the line between the two
-   planted tips (and away from its ends), the palm stays near level, every joint
-   0.05 rad inside its limits, as close to the stance as the rest allows.
-2. Physics: from the settled four-digit stance the servo targets move to the posture
-   over RAMP_S, are held for HOLD_S, and the run reports falls, which digits touch the
-   ground, the lifted digits' clearance and the peak joint torque against the cap.
-With ``--free`` the two tips may move to new spots (only their height is held), no
-other part of the hand may come within CLEARANCE of the floor, and the physics test
-starts in the posture instead of ramping from the four-digit stance.
+  uv run python scripts/scripted_gaits.py --teleop
+      the fast four-digit crawl steered from the keyboard in the MuJoCo viewer
+      (arrows move, ',' '.' turn, the same key again stops); the thumb slides along.
+      --thumb-steps: going ahead the thumb steps (it falls when switching).
+  uv run python scripts/scripted_gaits.py --stream --fast
+      the crawl straight ahead, in a viewer that re-runs it whenever this file is saved
 
-Scripted gaits (simulation only; joint targets from inverse kinematics plus the
-servos' static sag, played by the position servos):
-  --teleop        the fast four-digit crawl steered from the keyboard (arrows move,
-                  ',' '.' turn, the same key again stops); the thumb slides along.
-                  --thumb-steps: going ahead the thumb steps (falls when switching).
-  --stream --fast the crawl straight ahead in a viewer that re-runs it on every save
-  --stream --cane index + middle stepping, the thumb as a cane (falls after ~2 s)
-  --walk [--view] index + middle only, palm upright, whole-body torque control
-                  (falls after one step: one finger cannot carry the hand at 350 mA)
+Trials on two digits, which still fall:
+  --stream --cane   index + middle stepping, the thumb as a cane (falls after ~2 s)
+  --walk [--view]   index + middle only, palm upright, whole-body torque control
+                    (falls after one step: one finger cannot carry the hand at 350 mA)
+  (no mode flag)    can the hand stand on two digits? A posture search, then physics:
+    uv run python scripts/scripted_gaits.py                # middle finger + thumb
+    uv run python scripts/scripted_gaits.py --pair rf th   # another pair
+    uv run python scripts/scripted_gaits.py --pair if mf --free --max-pitch 1.6
+  1. Posture (least squares over the palm pose and the 16 joints): the two chosen
+     tips stay planted where they stand in the four-digit stance, the other two are
+     lifted by at least LIFT, the CoM lies on the line between the planted tips (and
+     away from its ends), the palm stays near level, every joint 0.05 rad inside its
+     limits. With ``--free`` the tips may move (only their height is held) and no
+     other part may come within CLEARANCE of the floor.
+  2. Physics: the servo targets ramp to the posture over RAMP_S (from the posture
+     itself with ``--free``), are held for HOLD_S; the run reports falls, contacts,
+     the lifted digits' clearance and the peak torque against the cap.
 """
 
 import argparse
@@ -45,7 +44,7 @@ from walking_leap import robot
 from walking_leap.env_cfg import walking_leap_flat_env_cfg
 
 DIGITS = ("if", "mf", "rf", "th")
-NAMES = {"if": "índice", "mf": "medio", "rf": "anular", "th": "pulgar"}
+NAMES = {"if": "index", "mf": "middle", "rf": "ring", "th": "thumb"}
 LIFT = 0.010  # m, clearance of the lifted digits' tips
 END_MARGIN = 0.020  # m, centre of mass at least this far from either planted tip
 JOINT_MARGIN = 0.05  # rad
@@ -237,7 +236,7 @@ def touching(m, d) -> set[str]:
       continue
     body = m.geom_bodyid[c.geom2 if c.geom1 == floor else c.geom1]
     name = mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_BODY, body) or ""
-    hit.add(name[:2] if name[:2] in DIGITS else "palma/otro")
+    hit.add(name[:2] if name[:2] in DIGITS else "palm/other")
   return hit
 
 
@@ -253,7 +252,7 @@ def run_physics(m, start_qpos, target_q, ramp_s=RAMP_S, viewer=None, d=None):
   palm = m.body("palm").id
   n_ramp = max(1, round(ramp_s / m.opt.timestep))
   n_hold = round(HOLD_S / m.opt.timestep)
-  counts = {k: 0 for k in [*DIGITS, "palma/otro"]}
+  counts = {k: 0 for k in [*DIGITS, "palm/other"]}
   peak, worst_tilt, min_clear = 0.0, 0.0, {k: 1.0 for k in DIGITS}
   xy0 = None
   wall0 = time.perf_counter()
@@ -702,10 +701,10 @@ def walk(
         if verbose:
           rel = com[:2] - plant[stance][:2]
           print(
-            f"  paso {steps:2d} t={i * dt:5.2f}s sobre {NAMES[stance]:7s} "
-            f"CoM-pie {1e3 * rel @ lateral:+6.1f} lat {1e3 * rel @ forward:+6.1f} "
-            f"adelante mm, aterrizó a {1e3 * np.linalg.norm(plant[stance][:2] - land):4.1f} "
-            f"mm del plan"
+            f"  step {steps:2d} t={i * dt:5.2f}s on {NAMES[stance]:7s} "
+            f"CoM-foot {1e3 * rel @ lateral:+6.1f} lat {1e3 * rel @ forward:+6.1f} "
+            f"fwd mm, landed {1e3 * np.linalg.norm(plant[stance][:2] - land):4.1f} "
+            f"mm from the plan"
           )
     tau = wbc.solve(d, contacts, tasks)
     if trace and i % 10 == 0:
@@ -991,7 +990,7 @@ def cane_plan(
       frames(swing_s, swing)
       planted[digit] = land
       if verbose:
-        print(f"  ciclo {cycle + 1}: {NAMES[digit]} avanza {1e3 * step:.0f} mm")
+        print(f"  cycle {cycle + 1}: {NAMES[digit]} moves {1e3 * step:.0f} mm ahead")
   return start, np.array(keys)
 
 
@@ -1288,14 +1287,14 @@ class Crawler:
 def fast_plan(m, cycles=4, step=0.035, verbose=False, **crawl):
   """Keyframes (servo targets every KEYFRAME_S) of the fast crawl straight ahead, and
   the start qpos."""
-  crawler = Crawler(m, **crawl)
+  crawler = Crawler(m, **{"thumb_drag": True, **crawl})  # the robust gait by default
   q = crawler.start.copy()
   keys = [crawler.targets_hold(q)]
   for cycle in range(cycles):
     k, q = crawler.cycle(q, (step, 0.0, 0.0), drag_s=1.0 if cycle == 0 else None)
     keys.extend(k)
     if verbose:
-      print(f"  ciclo {cycle + 1}")
+      print(f"  cycle {cycle + 1}")
   return crawler.start, np.array(keys)
 
 
@@ -1343,12 +1342,12 @@ def fast_walk(m, cycles=4, record=False, verbose=False, **plan):
 
 # Keys (GLFW codes): arrows move, ',' and '.' turn; the same key again stops.
 TELEOP_KEYS = {
-  265: ("adelante", (1.0, 0.0, 0.0)),
-  264: ("atras", (-1.0, 0.0, 0.0)),
-  263: ("izquierda", (0.0, 1.0, 0.0)),
-  262: ("derecha", (0.0, -1.0, 0.0)),
-  44: ("gira a la izquierda", (0.0, 0.0, 1.0)),
-  46: ("gira a la derecha", (0.0, 0.0, -1.0)),
+  265: ("forward", (1.0, 0.0, 0.0)),
+  264: ("back", (-1.0, 0.0, 0.0)),
+  263: ("left", (0.0, 1.0, 0.0)),
+  262: ("right", (0.0, -1.0, 0.0)),
+  44: ("turn left", (0.0, 0.0, 1.0)),
+  46: ("turn right", (0.0, 0.0, -1.0)),
 }
 TELEOP_STEP = (0.030, 0.015, np.radians(20.0))  # per cycle: forward m, sideways m, turn
 
@@ -1380,22 +1379,20 @@ def teleop(thumb_open: float = 0.0, thumb_steps: bool = False) -> None:
   hold = crawler.targets_hold(d.qpos.copy())
   d.ctrl[:] = hold
   mujoco.mj_forward(m, d)
-  state = {"name": "quieta", "command": np.zeros(3), "yaw": crawler.heading(d)}
+  state = {"name": "stopped", "command": np.zeros(3), "yaw": crawler.heading(d)}
 
   def key(code: int) -> None:
     if code not in TELEOP_KEYS:
       return
     name, unit = TELEOP_KEYS[code]
     if state["name"] == name:
-      state["name"], state["command"] = "quieta", np.zeros(3)
+      state["name"], state["command"] = "stopped", np.zeros(3)
     else:
       state["name"], state["command"] = name, np.array(unit) * TELEOP_STEP
 
   queue, last = deque(), hold
   per_key = round(KEYFRAME_S / m.opt.timestep)
-  print(
-    "Flechas: adelante/atras/izquierda/derecha; ',' y '.': girar; la misma tecla: parar"
-  )
+  print("Arrows: forward/back/left/right; ',' and '.': turn; the same key again: stop")
   with mujoco.viewer.launch_passive(m, d, key_callback=key) as viewer:
     viewer.cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
     viewer.cam.trackbodyid = m.body("palm").id
@@ -1422,14 +1419,14 @@ def teleop(thumb_open: float = 0.0, thumb_steps: bool = False) -> None:
           mujoco.mj_step(m, d)
       last = target
       caption(
-        viewer, f"{state['name']}  (flechas, ',' '.' girar; repetir tecla = parar)"
+        viewer, f"{state['name']}  (arrows move, ',' '.' turn, same key again stops)"
       )
       viewer.sync()
       time.sleep(max(0.0, KEYFRAME_S - (time.perf_counter() - t0)))
 
 
 def caption(viewer, text: str) -> None:
-  import unicodedata  # MuJoCo's font is ASCII only: drop the accents
+  import unicodedata  # MuJoCo's font is ASCII only
 
   text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
   try:
@@ -1456,7 +1453,7 @@ def stream(args) -> None:
     while viewer.is_running():
       if path.stat().st_mtime != stamp:
         stamp = path.stat().st_mtime
-        caption(viewer, "calculando la versión nueva...")
+        caption(viewer, "computing the new version...")
         try:
           mod = importlib.reload(importlib.import_module(path.stem))
           if args.fast:
@@ -1472,18 +1469,18 @@ def stream(args) -> None:
               record=True,
             )
           frames = new
-          end = f"se cae a los {result['time_s']} s" if result["fell"] else "no se cae"
-          steps = f"{result['steps']} pasos, " if result.get("steps") else ""
+          end = f"falls at {result['time_s']} s" if result["fell"] else "does not fall"
+          steps = f"{result['steps']} steps, " if result.get("steps") else ""
           if "speed_cm_s" in result:
             steps = f"{result['speed_cm_s']} cm/s, "
           label = (
-            f"versión {time.strftime('%H:%M:%S', time.localtime(stamp))}: "
-            f"{steps}{end}, avanza {result['moved_forward_mm']} mm, "
-            f"apoyos {result['ground_contact']}"
+            f"version {time.strftime('%H:%M:%S', time.localtime(stamp))}: "
+            f"{steps}{end}, {result['moved_forward_mm']} mm ahead, "
+            f"contacts {result['ground_contact']}"
           )
         except Exception as e:  # a half-written edit: keep the last run
           label = (
-            f"error en la versión nueva ({type(e).__name__}: {e}); sigue la anterior"
+            f"error in the new version ({type(e).__name__}: {e}); showing the last one"
           )
         print(label, flush=True)
         caption(viewer, label)
@@ -1535,7 +1532,7 @@ def main() -> None:
       record=True,
       verbose=True,
     )
-    print("Caminata sobre índice + medio:")
+    print("Walk on index + middle:")
     for key, value in result.items():
       print(f"  {key}: {value}")
     if args.view:  # replay the recorded run, slowed down, in a loop
@@ -1559,7 +1556,7 @@ def main() -> None:
   qpos, posture = solve_posture(
     m, stance, planted, args.free, args.max_pitch, args.home_weight, args.end_margin
   )
-  print(f"Postura sobre {NAMES[planted[0]]} + {NAMES[planted[1]]}:")
+  print(f"Posture on {NAMES[planted[0]]} + {NAMES[planted[1]]}:")
   for key, value in posture.items():
     print(f"  {key}: {value}")
   if args.free:  # start in the posture, tips 1 mm above the floor
@@ -1571,7 +1568,7 @@ def main() -> None:
   else:
     start, ramp = stance.qpos, RAMP_S
   result = run_physics(m, start, qpos[7:], ramp_s=ramp)
-  print(f"Física (rampa {ramp:.0f} s, mantener {HOLD_S:.0f} s):")
+  print(f"Physics (ramp {ramp:.0f} s, hold {HOLD_S:.0f} s):")
   for key, value in result.items():
     print(f"  {key}: {value}")
   if args.view:
