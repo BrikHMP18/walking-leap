@@ -1,6 +1,7 @@
 """Environment validation through mjlab (GPU if available, else CPU)."""
 
 import math
+import types
 
 import mjlab  # noqa: F401  (loads entry-point tasks)
 import pytest
@@ -303,3 +304,35 @@ def test_tracking_error_metrics(no_imu_env):
   assert torch.allclose(lin, torch.full_like(lin, 0.05), atol=1e-2)
   assert torch.allclose(yaw, torch.full_like(yaw, 0.2), atol=3e-2)
   no_imu_env.reset()
+
+
+##
+# The real hand (v2): rewards only, with and without the palm IMU.
+##
+
+REAL_TASK = "Walking-Leap-Flat-v2"
+REAL_NO_IMU_TASK = "Walking-Leap-Flat-NoImu-v2"
+
+
+def test_real_hand_tasks():
+  v1 = load_env_cfg(OMNI_TASK)
+  for task, n_actor in ((REAL_TASK, len(ACTOR_TERMS)), (REAL_NO_IMU_TASK, 4)):
+    cfg = load_env_cfg(task)
+    assert len(cfg.observations["actor"].terms) == n_actor
+    assert set(cfg.rewards) == set(v1.rewards) | {"long_air_time"}
+    hand = cfg.scene.entities["robot"]
+    assert hand.init_state.pos[2] == robot.FOLDED_ROOT_HEIGHT_STOCK
+    clip = cfg.actions["joint_pos"].clip
+    for joint, limits in robot.THUMB_LIMITS.items():
+      assert clip[joint] == limits
+    assert cfg.metrics["actuator_saturation"].params["effort_limit"] == (
+      robot.API_EFFORT_LIMIT
+    )
+
+
+def test_long_air_time_counts_only_beyond_the_threshold():
+  air = torch.tensor([[0.0, 0.4, 1.0, 2.5], [3.0, 0.0, 0.0, 0.0]])
+  data = types.SimpleNamespace(current_air_time=air)
+  env = types.SimpleNamespace(scene={"s": types.SimpleNamespace(data=data)})
+  penalty = mdp.long_air_time(env, "s", threshold=1.0)
+  assert torch.allclose(penalty, torch.tensor([1.5, 2.0]))

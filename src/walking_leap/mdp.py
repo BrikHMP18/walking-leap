@@ -106,6 +106,20 @@ def contact_active(
   return found.any(dim=-1).float()
 
 
+def long_air_time(
+  env: ManagerBasedRlEnv, sensor_name: str, threshold: float
+) -> torch.Tensor:
+  """Sum over primaries of their time off the secondary beyond ``threshold`` (s).
+
+  Zero for steps shorter than ``threshold``; grows for as long as a primary (e.g.
+  a digit) is held up. Needs ``track_air_time=True`` on the sensor.
+  """
+  sensor: ContactSensor = env.scene[sensor_name]
+  air = sensor.data.current_air_time
+  assert air is not None, f"'{sensor_name}' needs track_air_time=True"
+  return torch.clamp(air - threshold, min=0.0).sum(dim=-1)
+
+
 ##
 # Terminations.
 ##

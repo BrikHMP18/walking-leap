@@ -32,8 +32,9 @@ maintainer's explicit approval.
   constants buried in functions.
 - Register new variants with `register_mjlab_task` in `__init__.py`; task IDs
   follow `Walking-Leap-<Terrain>[-<Variant>]-v<N>` for walking (e.g.
-  `Walking-Leap-Flat-NoImu-v1`) and `Walking-Leap-Motion-<Terrain>-v<N>` for
-  motion imitation. Bump `N` when the task changes; never change what an
+  `Walking-Leap-Flat-NoImu-v1`) and `Walking-Leap-Motion-[<Clip>-]<Terrain>[-<Variant>]-v<N>`
+  for motion imitation (no clip segment: `hello`; e.g.
+  `Walking-Leap-Motion-Crawl-Flat-NoImu-v0`). Bump `N` when the task changes; never change what an
   existing ID trains.
 - Style: ruff, 2-space indentation (mjlab's convention), type hints, short
   docstrings that state units and frames.

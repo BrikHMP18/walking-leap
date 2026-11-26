@@ -3,6 +3,8 @@
   Walking-Leap-Flat-v0        constant forward command (baseline).
   Walking-Leap-Flat-v1        omnidirectional velocity commands.
   Walking-Leap-Flat-NoImu-v1  as v1, actor without the palm-IMU observations.
+  Walking-Leap-Flat-v2        v1 on the real hand's model, rewards only.
+  Walking-Leap-Flat-NoImu-v2  as v2, actor without the palm-IMU observations.
 
 Built directly from mjlab managers instead of mjlab's legged velocity template,
 which carries quadruped assumptions (feet, air time, swing height, terrain
@@ -39,10 +41,13 @@ from mjlab.viewer import ViewerConfig
 
 from walking_leap import mdp
 from walking_leap.robot import (
+  API_EFFORT_LIMIT,
   EFFORT_LIMIT,
   FINGER_ROOT_BODIES,
   FINGERTIP_BODIES,
+  MEASURED_STIFFNESS,
   ROOT_BODY,
+  TORSION,
   get_leap_hand_cfg,
   joint_limits,
 )
@@ -420,4 +425,68 @@ def walking_leap_flat_omni_env_cfg(
     for name in IMU_OBSERVATIONS:
       del actor_terms[name]
 
+  return cfg
+
+
+##
+# The real hand (v2): the hand as it runs now, from docs/next_training.md: the IMU
+# on its mount, LEAP's own thumb limits, stock fingertips (no socks), the 350 mA cap
+# (0.181 N*m), the measured stiffness (2.6 N*m/rad) and torsional friction, in the
+# folded-thumb stance it stands up into. No randomization yet (nominal first).
+##
+
+# Commands, palm frame. Slower than v1: the cap is 2.8 times lower, and on this hand
+# the reward-only runs of README "First runs" made real steps at 0.027 m/s.
+REAL_LIN_VEL_X = (-0.03, 0.03)  # m/s
+REAL_LIN_VEL_Y = (-0.015, 0.015)  # m/s
+REAL_ANG_VEL_Z = (-0.2, 0.2)  # rad/s
+# Tracking kernels scaled to those speeds (Monte Carlo over the commands): a hand
+# that stands still earns 43 % of the linear term and 44 % of the yaw term, close to
+# v0 (37 %) and v1 (40 %). Its tracking errors would be 0.015 m/s and 0.085 rad/s.
+REAL_LIN_VEL_TRACKING_STD = 0.015  # m/s
+REAL_YAW_TRACKING_STD = 0.15  # rad/s
+# No digit kept off the ground for good: on this hand every reward set of README
+# "First runs" ended with one digit held up (the thumb with the base rewards), and
+# the sliding penalty alone makes lifting the thumb for good the cheapest way not
+# to drag it. Time beyond LONG_AIR_TIME_S in the air costs |weight| per second per
+# digit, so steps shorter than that are free.
+LONG_AIR_TIME_S = 1.0
+LONG_AIR_TIME_WEIGHT = -1.0
+
+
+def walking_leap_flat_real_env_cfg(
+  play: bool = False, imu: bool = True
+) -> ManagerBasedRlEnvCfg:
+  """Omnidirectional walking on the real hand's model, rewards only (v2).
+
+  v1 (commands, tracking terms, sliding penalty, metrics; ``imu=False`` drops the
+  palm-IMU terms from the actor) with the real hand, its joint limits and cap, the
+  slower commands above and the penalty on digits held up.
+  """
+  cfg = walking_leap_flat_omni_env_cfg(play=play, imu=imu)
+  cfg.scene.entities["robot"] = get_leap_hand_cfg(
+    as_built=True,
+    folded_thumb=True,
+    feet=False,
+    effort_limit=API_EFFORT_LIMIT,
+    stiffness=MEASURED_STIFFNESS,
+    torsion=TORSION,
+  )
+  action = cfg.actions["joint_pos"]
+  assert isinstance(action, JointPositionActionCfg)
+  action.clip = joint_limits(as_built=True)
+
+  twist = cfg.commands["twist"]
+  assert isinstance(twist, mdp.VelocityCommandCfg)
+  twist.ranges = mdp.VelocityCommandCfg.Ranges(
+    lin_vel_x=REAL_LIN_VEL_X, lin_vel_y=REAL_LIN_VEL_Y, ang_vel_z=REAL_ANG_VEL_Z
+  )
+  cfg.rewards["track_lin_vel"].params["std"] = REAL_LIN_VEL_TRACKING_STD
+  cfg.rewards["track_ang_vel"].params["std"] = REAL_YAW_TRACKING_STD
+  cfg.rewards["long_air_time"] = RewardTermCfg(
+    func=mdp.long_air_time,
+    weight=LONG_AIR_TIME_WEIGHT,
+    params={"sensor_name": DIGIT_CONTACT, "threshold": LONG_AIR_TIME_S},
+  )
+  cfg.metrics["actuator_saturation"].params["effort_limit"] = API_EFFORT_LIMIT
   return cfg

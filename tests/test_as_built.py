@@ -15,9 +15,12 @@ FEET = robot.FOOT_GEOMS
 STANCES = pytest.mark.parametrize("folded_thumb", [False, True])
 
 
-def build(folded_thumb: bool = False) -> mujoco.MjModel:
+def build(folded_thumb: bool = False, **hand) -> mujoco.MjModel:
   cfg = robot.get_leap_hand_cfg(
-    as_built=True, folded_thumb=folded_thumb, effort_limit=robot.API_EFFORT_LIMIT
+    as_built=True,
+    folded_thumb=folded_thumb,
+    effort_limit=robot.API_EFFORT_LIMIT,
+    **hand,
   )
   spec = Entity(cfg).spec
   spec.worldbody.add_geom(
@@ -179,3 +182,75 @@ def test_api_effort_limit():
   assert robot.API_EFFORT_LIMIT == pytest.approx(0.181, abs=1e-3)
   m = build()
   assert np.allclose(np.abs(m.actuator_forcerange), robot.API_EFFORT_LIMIT)
+
+
+##
+# The hand as the real one runs now: stock fingertips (no socks), with the IMU, and
+# the measured stiffness and torsional friction (the walking v2 tasks' hand).
+##
+
+TIPS = robot.FINGERTIP_GEOMS
+REAL_HAND = dict(feet=False, stiffness=robot.MEASURED_STIFFNESS, torsion=robot.TORSION)
+
+
+def test_stock_tips_keep_the_imu_and_thumb_limits():
+  m = build(feet=False)
+  names = {m.geom(g).name for g in range(m.ngeom)}
+  assert not names & set(FEET)
+  assert "imu_collision" in names and m.sensor("imu_upvector") is not None
+  mount = robot.IMU_MASS + robot.IMU_COVER_MASS + robot.IMU_PAD_MASS
+  mount += robot.IMU_PLUG_MASS + 3 * robot.IMU_BOLT_MASS
+  assert m.body_subtreemass[m.body("palm").id] == pytest.approx(0.746 + mount, abs=1e-6)
+  for joint, limits in robot.THUMB_LIMITS.items():
+    assert np.allclose(m.joint(joint).range, limits)
+
+
+def test_torsion_needs_condim_4_and_leaves_sliding_alone():
+  plain, m = build(feet=False), build(**REAL_HAND)
+  tip, other = robot.TORSION
+  hand = [
+    g
+    for g in range(m.ngeom)
+    if m.geom(g).name.endswith("_tip") or "_collision" in m.geom(g).name
+  ]
+  assert hand
+  for g in hand:
+    name = m.geom(g).name
+    assert m.geom_condim[g] == 4 and plain.geom_condim[g] == 3
+    assert m.geom_friction[g][1] == pytest.approx(
+      tip if name.endswith("_tip") else other
+    )
+    assert m.geom_friction[g][0] == plain.geom_friction[g][0]  # 0.5 tips, 0.2 links
+  # Stiffness: 2.6 instead of 3.0 N*m/rad, the cap unchanged.
+  # MuJoCo's DC motor keeps the position gain (V/rad) in gainprm[4].
+  ratio = m.actuator_gainprm[0, 4] / plain.actuator_gainprm[0, 4]
+  assert ratio == pytest.approx(robot.MEASURED_STIFFNESS / robot.STIFFNESS, rel=1e-6)
+  assert np.allclose(np.abs(m.actuator_forcerange), robot.API_EFFORT_LIMIT)
+
+
+def test_stands_on_stock_tips_folded():
+  """The real hand's set-up holds the folded-thumb stance for 4 s on its four tips."""
+  m = build(folded_thumb=True, **REAL_HAND)
+  d = nominal_data(m)
+  palm = m.body("palm").id
+  assert d.ncon == 0, "no penetration and no self-contact at reset"
+  lows = [lowest_point(m, d, tip) for tip in TIPS]
+  assert 0.0 < min(lows) and max(lows) < 0.004
+  z0, xy0 = d.qpos[2], d.qpos[:2].copy()
+  peak = 0.0
+  for k in range(round(4.0 / m.opt.timestep)):
+    mujoco.mj_step(m, d)
+    if k * m.opt.timestep > 0.5:
+      peak = max(peak, float(np.abs(d.actuator_force).max()))
+  assert all(w.number == 0 for w in d.warning)
+  assert d.xmat[palm].reshape(3, 3)[2, 2] > np.cos(np.radians(3.0))
+  assert abs(d.qpos[2] - z0) < 0.006
+  assert np.linalg.norm(d.qpos[:2] - xy0) < 0.005
+  floor = m.geom("floor").id
+  touching = {
+    m.geom(c.geom2 if c.geom1 == floor else c.geom1).name
+    for c in d.contact[: d.ncon]
+    if floor in (c.geom1, c.geom2)
+  }
+  assert touching == set(TIPS)
+  assert peak < 0.5 * robot.API_EFFORT_LIMIT

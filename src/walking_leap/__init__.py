@@ -7,14 +7,18 @@ from mjlab.tasks.registry import register_mjlab_task
 from mjlab.tasks.tracking.rl import MotionTrackingOnPolicyRunner
 
 from walking_leap.agent_cfg import (
+  walking_leap_crawl_ppo_runner_cfg,
   walking_leap_motion_ppo_runner_cfg,
   walking_leap_ppo_runner_cfg,
+  walking_leap_real_ppo_runner_cfg,
 )
 from walking_leap.env_cfg import (
   walking_leap_flat_env_cfg,
   walking_leap_flat_omni_env_cfg,
+  walking_leap_flat_real_env_cfg,
 )
 from walking_leap.motion_cfg import walking_leap_motion_env_cfg
+from walking_leap.robot import MEASURED_STIFFNESS, TORSION
 
 register_mjlab_task(
   task_id="Walking-Leap-Flat-v0",
@@ -45,5 +49,26 @@ for version, robust in (("v0", False), ("v1", True)):
     env_cfg=walking_leap_motion_env_cfg(robust=robust, cables=robust),
     play_env_cfg=walking_leap_motion_env_cfg(play=True, robust=robust, cables=robust),
     rl_cfg=walking_leap_motion_ppo_runner_cfg(),
+    runner_cls=MotionTrackingOnPolicyRunner,
+  )
+
+# The real hand as it runs now (IMU, stock fingertips, 350 mA, measured stiffness,
+# torsional friction), with and without the palm IMU in the actor: walking from
+# rewards only (Flat-v2) and imitating the real crawl (Motion-Crawl-Flat-v0).
+for variant, imu in (("", True), ("-NoImu", False)):
+  register_mjlab_task(
+    task_id=f"Walking-Leap-Flat{variant}-v2",
+    env_cfg=walking_leap_flat_real_env_cfg(imu=imu),
+    play_env_cfg=walking_leap_flat_real_env_cfg(play=True, imu=imu),
+    rl_cfg=walking_leap_real_ppo_runner_cfg(),
+  )
+  crawl = dict(
+    clip="crawl", feet=False, imu=imu, stiffness=MEASURED_STIFFNESS, torsion=TORSION
+  )
+  register_mjlab_task(
+    task_id=f"Walking-Leap-Motion-Crawl-Flat{variant}-v0",
+    env_cfg=walking_leap_motion_env_cfg(**crawl),
+    play_env_cfg=walking_leap_motion_env_cfg(play=True, **crawl),
+    rl_cfg=walking_leap_crawl_ppo_runner_cfg(),
     runner_cls=MotionTrackingOnPolicyRunner,
   )

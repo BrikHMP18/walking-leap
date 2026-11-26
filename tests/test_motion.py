@@ -170,3 +170,60 @@ def test_play_has_no_disturbance():
   assert not {"push", "cables", "cables_at_reset"} & set(
     load_env_cfg("Walking-Leap-Motion-Flat-v1", play=True).events
   )
+
+
+##
+# The real crawl (docs/data/real_clips/crawl.npz) on the real hand's model.
+##
+
+CRAWL_TASK = "Walking-Leap-Motion-Crawl-Flat-v0"
+CRAWL_NO_IMU_TASK = "Walking-Leap-Motion-Crawl-Flat-NoImu-v0"
+
+
+def test_crawl_file_is_up_to_date():
+  """assets/clips/crawl.npz is the real crawl replayed on the real hand's model."""
+  motion = clips.replay("crawl", clips.RealHand())
+  saved = np.load(clips.CLIPS_DIR / "crawl.npz")
+  targets = np.load(clips.REAL_CLIPS_DIR / "crawl.npz")["q"]
+  assert saved["fps"][0] == clips.FPS and len(saved["joint_pos"]) == len(targets)
+  assert np.allclose(saved["joint_pos"], motion.qpos[:, 7:], atol=2e-3)
+  assert np.allclose(saved["body_pos_w"][:, 0], motion.qpos[:, :3], atol=1e-4)
+  # It crawls forward (palm +x at the start) about 10 cm in its 3 cycles.
+  moved = saved["body_pos_w"][-1, 0, :2] - saved["body_pos_w"][0, 0, :2]
+  assert 0.08 < moved[0] < 0.13 and abs(moved[1]) < 0.02
+
+
+def test_crawl_tasks_track_the_digits_last_links():
+  for task, imu_terms in ((CRAWL_TASK, True), (CRAWL_NO_IMU_TASK, False)):
+    cfg = load_env_cfg(task)
+    command = cfg.commands["motion"]
+    assert command.motion_file.endswith("crawl.npz")
+    assert not any(b.endswith("_foot") for b in command.body_names)
+    actor = list(cfg.observations["actor"].terms)
+    assert ("base_ang_vel" in actor) == imu_terms
+    assert ("projected_gravity" in actor) == imu_terms
+    assert "reference_gravity" in actor  # the clip's tilt, not a sensor
+    assert "projected_gravity" in cfg.observations["critic"].terms
+    hand = cfg.scene.entities["robot"]
+    assert hand.init_state.pos[2] == robot.FOLDED_ROOT_HEIGHT_STOCK
+
+
+def test_crawl_as_targets_stays_close():
+  """5 s of the crawl's joints as targets, no learning: near the reference."""
+  cfg = load_env_cfg(CRAWL_TASK, play=True)
+  cfg.scene.num_envs = NUM_ENVS
+  cfg.seed = 0
+  env = ManagerBasedRlEnv(cfg, device=DEVICE)
+  try:
+    env.reset()
+    command = env.command_manager.get_term("motion")
+    worst = 0.0
+    for _ in range(250):
+      obs, rew, terminated, _, _ = env.step(reference_action(env))
+      assert torch.isfinite(obs["critic"]).all() and torch.isfinite(rew).all()
+      assert not terminated.any()
+      error = (command.anchor_pos_w - command.robot_anchor_pos_w).norm(dim=-1)
+      worst = max(worst, float(error.max()))
+    assert worst < 0.02
+  finally:
+    env.close()

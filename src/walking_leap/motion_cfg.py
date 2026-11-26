@@ -29,11 +29,14 @@ from mjlab.viewer import ViewerConfig
 
 from walking_leap import mdp
 from walking_leap.clips import CLIPS_DIR
-from walking_leap.env_cfg import ACTION_SCALE, PALM_CONTACT
+from walking_leap.env_cfg import ACTION_SCALE, IMU_OBSERVATIONS, PALM_CONTACT
 from walking_leap.robot import (
   API_EFFORT_LIMIT,
+  FINGERTIP_BODIES,
+  FINGERTIP_GEOMS,
   FOOT_GEOMS,
   ROOT_BODY,
+  STIFFNESS,
   get_leap_hand_cfg,
   joint_limits,
 )
@@ -72,10 +75,28 @@ def walking_leap_motion_env_cfg(
   robust: bool = False,
   cables: bool = False,
   clip: str = "hello",
+  feet: bool = True,
+  imu: bool = True,
+  stiffness: float = STIFFNESS,
+  torsion: tuple[float, float] | None = None,
 ) -> ManagerBasedRlEnvCfg:
   """Imitate ``clip``. ``robust`` adds kicks, sensor noise, delay and random numbers
   for what nobody has measured (the feet's grip, the balance, the motors); ``cables``
-  adds a small steady pull that changes every few seconds."""
+  adds a small steady pull that changes every few seconds.
+
+  ``feet=False`` is the hand on its stock fingertips (no socks): the digits' last
+  links stand in for the feet. ``imu=False`` removes the palm-IMU terms from the
+  actor (the critic keeps them). ``stiffness`` (N*m/rad) and ``torsion`` (m) are the
+  hand's, see ``robot.get_leap_hand_cfg``."""
+
+  # Tracked bodies and the bodies whose height ends an episode: the feet, or without
+  # socks the digits' last links (already tracked).
+  tracked = (
+    TRACKED_BODIES
+    if feet
+    else tuple(b for b in TRACKED_BODIES if not b.endswith("_foot"))
+  )
+  stand_on = FOOT_GEOMS if feet else FINGERTIP_BODIES
 
   ##
   # Sensors.
@@ -134,6 +155,9 @@ def walking_leap_motion_env_cfg(
     "body_pos": ObservationTermCfg(func=track_mdp.robot_body_pos_b, params=motion),
     "body_ori": ObservationTermCfg(func=track_mdp.robot_body_ori_b, params=motion),
   }
+  if not imu:
+    for name in IMU_OBSERVATIONS:
+      del actor_terms[name]
   observations = {
     "actor": ObservationGroupCfg(terms=actor_terms, enable_corruption=robust),
     "critic": ObservationGroupCfg(terms=critic_terms, enable_corruption=False),
@@ -164,7 +188,7 @@ def walking_leap_motion_env_cfg(
       debug_vis=True,
       motion_file=str(CLIPS_DIR / f"{clip}.npz"),
       anchor_body_name=ROOT_BODY,
-      body_names=TRACKED_BODIES,
+      body_names=tracked,
       pose_range={
         "x": (-0.005, 0.005),
         "y": (-0.005, 0.005),
@@ -198,14 +222,17 @@ def walking_leap_motion_env_cfg(
         interval_range_s=(1.0, 3.0),
         params={"velocity_range": PUSH_RANGE},
       ),
-      # Not measured yet: the socks' grip, the mass on the back, the motors.
+      # Not measured yet: the socks' grip, the mass on the back, the motors. Stock
+      # tips: 0.5 to 1.0, from the real stand-up (docs/next_training.md).
       "foot_friction": EventTermCfg(
         mode="startup",
         func=dr.geom_friction,
         params={
-          "asset_cfg": SceneEntityCfg("robot", geom_names=FOOT_GEOMS),
+          "asset_cfg": SceneEntityCfg(
+            "robot", geom_names=FOOT_GEOMS if feet else FINGERTIP_GEOMS
+          ),
           "operation": "abs",
-          "ranges": (0.4, 0.9),
+          "ranges": (0.4, 0.9) if feet else (0.5, 1.0),
           "shared_random": True,
         },
       ),
@@ -308,7 +335,7 @@ def walking_leap_motion_env_cfg(
     ),
     "foot_height": TerminationTermCfg(
       func=track_mdp.bad_motion_body_pos_z_only,
-      params={**motion, "threshold": 0.03, "body_names": FOOT_GEOMS},
+      params={**motion, "threshold": 0.03, "body_names": stand_on},
     ),
   }
 
@@ -323,7 +350,12 @@ def walking_leap_motion_env_cfg(
   }
 
   hand = get_leap_hand_cfg(
-    as_built=True, folded_thumb=True, effort_limit=API_EFFORT_LIMIT
+    as_built=True,
+    folded_thumb=True,
+    effort_limit=API_EFFORT_LIMIT,
+    feet=feet,
+    stiffness=stiffness,
+    torsion=torsion,
   )
   if robust:  # Targets reach the motors up to 20 ms late.
     assert hand.articulation is not None

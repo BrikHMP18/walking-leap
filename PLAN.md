@@ -146,6 +146,19 @@ The trainings below that are checked come from a branch, not from this milestone
 - [ ] IMU ablation: `Walking-Leap-Flat-NoImu-v1` (actor without palm IMU, 51
       dims; `test_no_imu_actor_keeps_privileged_critic`) against v1, 3 seeds
       each: tracking errors, falls, slip
+- [ ] Real hand, rewards only (`Walking-Leap-Flat-v2`, `-NoImu-v2`): v1 on the real
+      hand's model with slower commands and `long_air_time` (no digit up for more
+      than 1 s; `test_long_air_time_counts_only_beyond_the_threshold`,
+      `test_real_hand_tasks`). Train 2 seeds each, 6000 iterations; compare with and
+      without IMU: tracking errors, falls, thumb sliding (`tip_slip_rate_th`), and
+      survival under pushes as in Bhatt et al., "Blind Dexterity" (arXiv:2608.29487)
+- [ ] Imitate the real crawl (`Walking-Leap-Motion-Crawl-Flat-v0`, `-NoImu-v0`):
+      docs/next_training.md steps 4–5. The crawl as a motion file
+      (`clips.replay`, `test_crawl_file_is_up_to_date`); train 2 seeds each,
+      3000 iterations, nominal first, then randomized; then the real hand
+      (shadow, then driving)
+- [ ] Steerable imitation: turning crawl clips (and one where the thumb steps,
+      as in `taps`), one policy for all of them, the keyboard picking the next cycle
 - [ ] Keyboard teleoperation of the velocity command in `play`
 
 ### Phase 8 — Robustness
@@ -172,6 +185,11 @@ The trainings below that are checked come from a branch, not from this milestone
 ## Milestone C — Real hardware (started: scripted motions, see docs/real_hand.md)
 
 ### Phase 9 — Sim-to-real preparation
+- [x] The real hand's set-up in the model: IMU and mount, stock fingertips
+      (`feet=False`), LEAP's thumb limits, 350 mA cap, measured stiffness 2.6
+      N·m/rad and fitted torsional friction (`test_stock_tips_keep_the_imu_and_thumb_limits`,
+      `test_torsion_needs_condim_4_and_leaves_sliding_alone`,
+      `test_stands_on_stock_tips_folded`)
 - [ ] Measure real hand mass and inertia (with IMU, cables, mounts)
   - [x] Feet and IMU in the model, from CAD and datasheets (`tests/test_as_built.py`);
         weights, grip and fit not measured

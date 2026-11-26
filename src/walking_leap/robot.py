@@ -16,8 +16,11 @@ in code, so the upstream file stays byte-identical:
 4. The palm starts palm-down at the nominal height, and the XML ``<option>``
    is reset (simulation options live in ``env_cfg.py``).
 5. Optionally (``as_built=True``) the hand as it is being built: four TPU foot
-   socks and the IMU on its mount (see "Add-on parts"), and the thumb limits of the
-   LEAP authors' own URDF, which Menagerie's file has shifted by one joint.
+   socks (``feet=False`` leaves them off) and the IMU on its mount (see "Add-on
+   parts"), and the thumb limits of the LEAP authors' own URDF, which Menagerie's
+   file has shifted by one joint.
+6. Optionally (``torsion``) torsional friction on the hand's contacts, fitted on
+   the real hand; it needs condim 4 (``collision_cfg``).
 
 Frames. With the palm at identity orientation the palm frame is a conventional
 base frame: +x points from the wrist toward the fingertips, +y toward the thumb
@@ -63,13 +66,21 @@ FINGERTIP_BODIES: tuple[str, ...] = ("if_ds", "mf_ds", "rf_ds", "th_ds")
 FINGERTIP_GEOMS: tuple[str, ...] = ("if_tip", "mf_tip", "rf_tip", "th_tip")
 
 
-def get_spec(as_built: bool = False) -> mujoco.MjSpec:
+def get_spec(
+  as_built: bool = False,
+  feet: bool = True,
+  torsion: tuple[float, float] | None = None,
+) -> mujoco.MjSpec:
+  """The hand's spec. ``as_built`` adds the IMU, LEAP's thumb limits and, with
+  ``feet``, the TPU socks; ``torsion`` = (fingertips, other contacts) torsional
+  friction in m (only acts with condim >= 4, see ``collision_cfg``)."""
   spec = mujoco.MjSpec.from_file(str(LEAP_HAND_XML))
   palm = spec.body(ROOT_BODY)
+  socks = as_built and feet
   # The menagerie places the palm upside down at z=0.1. Resets use INIT_STATE,
   # but qpos0 (palm pose here, joints at 0) is what mjlab uses to size contact
   # buffers, so keep it palm-down and clear of the ground.
-  palm.pos = (0.0, 0.0, INIT_ROOT_HEIGHT_AS_BUILT if as_built else INIT_ROOT_HEIGHT)
+  palm.pos = (0.0, 0.0, INIT_ROOT_HEIGHT_AS_BUILT if socks else INIT_ROOT_HEIGHT)
   palm.quat = (1.0, 0.0, 0.0, 0.0)
   palm.add_freejoint(name="floating_base")
   for actuator in list(spec.actuators):
@@ -84,9 +95,38 @@ def get_spec(as_built: bool = False) -> mujoco.MjSpec:
   if as_built:
     for joint, limits in THUMB_LIMITS.items():
       spec.joint(joint).range = limits
-    add_feet(spec)
+    if feet:
+      add_feet(spec)
     add_imu(spec)
+  if torsion is not None:
+    set_torsional_friction(spec, *torsion)
   return spec
+
+
+# Torsional friction (m): how much a contact resists spinning about its normal.
+# Fitted on the real hand by replaying its scripted runs in MuJoCo with condim=4
+# (docs/next_training.md, "Torsional friction: the test"): 0.003 m at the
+# fingertips and 0.03 m on every other contact halve the heading error per clip
+# (10 to 5 degrees) and make the crawl turn the way the real one does (M: fit
+# against the real IMU, five runs). Without it a fingertip spins for free.
+TORSION: tuple[float, float] = (0.003, 0.03)
+
+
+def set_torsional_friction(spec: mujoco.MjSpec, tip: float, other: float) -> None:
+  """Set friction[1] (m) of the fingertips/feet and of every other collision geom.
+
+  Sliding (friction[0]) and rolling friction stay as the XML and the parts set them.
+  """
+  for geom in spec.geoms:
+    if geom.name.endswith(("_tip", "_foot")):
+      value = tip
+    elif "_collision" in geom.name:
+      value = other
+    else:
+      continue
+    friction = list(geom.friction)
+    friction[1] = value
+    geom.friction = friction
 
 
 # Thumb limits (rad) of the LEAP authors' URDF and API (`LEAPsim_limits`). Menagerie
@@ -322,10 +362,17 @@ API_CURRENT_LIMIT = 0.350
 API_EFFORT_LIMIT = STALL_TORQUE * API_CURRENT_LIMIT / STALL_CURRENT  # 0.181 N*m
 # Torque per volt at zero speed, K/R = stall_torque / voltage (N*m/V).
 TORQUE_PER_VOLT = STALL_TORQUE / SUPPLY_VOLTAGE
+# Stiffness the real joints follow their commands with, at the API's gains 1200 / 0 /
+# 600: replaying the real runs, 2.2-3.0 N*m/rad fit and 2.6 fits best; 1.6 is ruled
+# out (M: fit against the real encoders, docs/real_hand.md, docs/next_training.md).
+MEASURED_STIFFNESS = 2.6
 
 
-def actuator_cfg(effort_limit: float = EFFORT_LIMIT) -> BuiltinDcMotorActuatorCfg:
-  """One XC330 position servo per joint, torque capped at ``effort_limit`` (N*m)."""
+def actuator_cfg(
+  effort_limit: float = EFFORT_LIMIT, stiffness: float = STIFFNESS
+) -> BuiltinDcMotorActuatorCfg:
+  """One XC330 position servo per joint: torque capped at ``effort_limit`` (N*m),
+  small-signal ``stiffness`` in N*m/rad."""
   return BuiltinDcMotorActuatorCfg(
     # Joints only: ".*" would also match the IMU's site.
     target_names_expr=(r".*_(mcp|rot|pip|dip|cmc|axl|ipl)",),
@@ -335,7 +382,7 @@ def actuator_cfg(effort_limit: float = EFFORT_LIMIT) -> BuiltinDcMotorActuatorCf
       no_load_speed=NO_LOAD_SPEED,
     ),
     mode=DcMotorInputMode.POSITION,
-    stiffness=STIFFNESS / TORQUE_PER_VOLT,  # V/rad
+    stiffness=stiffness / TORQUE_PER_VOLT,  # V/rad
     damping=0.0,
     voltage_limit=SUPPLY_VOLTAGE,
     effort_limit=effort_limit,
@@ -387,6 +434,10 @@ FOLDED_JOINT_POS: dict[str, float] = {
   "th_ipl": 0.307,
 }
 FOLDED_ROOT_HEIGHT = 0.131
+# The same stance on the stock fingertips (no socks): the lowest point is 0.1280 m
+# below the palm (index tip), so ~1 mm of clearance. The real hand stands at about
+# 128 mm in it (docs/real_hand.md).
+FOLDED_ROOT_HEIGHT_STOCK = 0.129
 # Where the four feet (FOOT_GEOMS order) stand in that stance: x, y in the palm frame, m.
 FOLDED_FEET: tuple[tuple[float, float], ...] = (
   (0.020, 0.0082),
@@ -408,13 +459,19 @@ INIT_STATE = EntityCfg.InitialStateCfg(
 # friction / solref / solimp are inherited from the XML (links 0.2, tips 0.5).
 ##
 
-COLLISION_CFG = CollisionCfg(
-  geom_names_expr=(r".*_collision.*", r".*_tip$", r".*_foot$"),
-  contype=1,
-  conaffinity=1,
-  condim=3,
-  priority=1,
-)
+
+def collision_cfg(condim: int = 3) -> CollisionCfg:
+  """The hand's contacts; ``condim=4`` adds torsional friction (see ``TORSION``)."""
+  return CollisionCfg(
+    geom_names_expr=(r".*_collision.*", r".*_tip$", r".*_foot$"),
+    contype=1,
+    conaffinity=1,
+    condim=condim,
+    priority=1,
+  )
+
+
+COLLISION_CFG = collision_cfg()
 
 
 def joint_limits(as_built: bool = False) -> dict[str, tuple[float, float]]:
@@ -428,23 +485,31 @@ def get_leap_hand_cfg(
   as_built: bool = False,
   folded_thumb: bool = False,
   effort_limit: float = EFFORT_LIMIT,
+  feet: bool = True,
+  stiffness: float = STIFFNESS,
+  torsion: tuple[float, float] | None = None,
 ) -> EntityCfg:
   """Return a fresh LEAP Hand entity config (fresh to avoid shared mutation).
 
-  ``as_built`` adds the feet, the IMU and LEAP's own thumb limits; ``folded_thumb``
-  (as-built only) starts in that stance; ``effort_limit`` is the torque cap (N*m).
+  ``as_built`` adds the IMU, LEAP's own thumb limits and, with ``feet``, the TPU
+  socks (``feet=False``: the stock fingertips the real hand runs on now);
+  ``folded_thumb`` (as-built only) starts in that stance; ``effort_limit`` is the
+  torque cap (N*m), ``stiffness`` the servos' (N*m/rad); ``torsion`` (m, fingertips
+  and other contacts) turns on torsional friction with condim 4.
   """
+  socks = as_built and feet
   init_state = INIT_STATE
   if folded_thumb:
-    assert as_built, "the folded-thumb stance stands on the as-built hand's feet"
-    init_state = replace(
-      INIT_STATE, pos=(0.0, 0.0, FOLDED_ROOT_HEIGHT), joint_pos=FOLDED_JOINT_POS
-    )
-  elif as_built:
+    assert as_built, "the folded-thumb stance needs LEAP's own thumb limits"
+    height = FOLDED_ROOT_HEIGHT if socks else FOLDED_ROOT_HEIGHT_STOCK
+    init_state = replace(INIT_STATE, pos=(0.0, 0.0, height), joint_pos=FOLDED_JOINT_POS)
+  elif socks:
     init_state = replace(INIT_STATE, pos=(0.0, 0.0, INIT_ROOT_HEIGHT_AS_BUILT))
   return EntityCfg(
     init_state=init_state,
-    collisions=(COLLISION_CFG,),
-    spec_fn=partial(get_spec, as_built=as_built),
-    articulation=EntityArticulationInfoCfg(actuators=(actuator_cfg(effort_limit),)),
+    collisions=(collision_cfg(condim=3 if torsion is None else 4),),
+    spec_fn=partial(get_spec, as_built=as_built, feet=feet, torsion=torsion),
+    articulation=EntityArticulationInfoCfg(
+      actuators=(actuator_cfg(effort_limit, stiffness),)
+    ),
   )

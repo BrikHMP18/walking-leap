@@ -34,8 +34,11 @@ the real hand and what to train next).
   scripted cycles; the simulator's gravity direction matches the real IMU's within
   about 1.6° on average ([docs/real_hand.md](docs/real_hand.md)).
 - **Implemented, not yet trained:** omnidirectional commands with a
-  fingertip-sliding penalty (`Walking-Leap-Flat-v1`) and its IMU-free variant
-  (`-NoImu-v1`), both on the nominal model.
+  fingertip-sliding penalty (`Walking-Leap-Flat-v1`, `-NoImu-v1`) on the nominal
+  model; and on the real hand's model (IMU, stock tips, 350 mA, measured stiffness,
+  torsional friction), each with and without the IMU in the actor: walking from
+  rewards only (`Walking-Leap-Flat-v2`, `-NoImu-v2`) and imitating the real crawl
+  (`Walking-Leap-Motion-Crawl-Flat-v0`, `-NoImu-v0`).
 
 What the next training batch should change, from all of it:
 [docs/next_training.md](docs/next_training.md). See [PLAN.md](PLAN.md).
@@ -121,6 +124,10 @@ and reward terms; motion tasks use the as-built hand, see "Animations"):
 | `Walking-Leap-Flat-NoImu-v1` | as v1 | 51: encoders only |
 | `Walking-Leap-Motion-Flat-v0` | imitate the `hello` clip, as-built hand, nothing random | 89: encoders + palm IMU + the reference |
 | `Walking-Leap-Motion-Flat-v1` | as Motion-v0, with kicks, sensor noise, delay, random grip, balance and motors, cable pull | 89 |
+| `Walking-Leap-Flat-v2` | real hand, rewards only: vx ±0.03, vy ±0.015 m/s, yaw ±0.2 rad/s; resampled every 3–5 s, 15 % zero | 57: encoders + palm IMU |
+| `Walking-Leap-Flat-NoImu-v2` | as v2 | 51: encoders only |
+| `Walking-Leap-Motion-Crawl-Flat-v0` | real hand, imitate the real crawl (3 cycles, 28 s), nothing random | 89: encoders + palm IMU + the reference |
+| `Walking-Leap-Motion-Crawl-Flat-NoImu-v0` | as Crawl-v0 | 83: encoders + the reference |
 
 Visualize the environment without a policy (`--viewer native` opens a MuJoCo
 window; `--viewer viser` serves a web viewer at http://localhost:8080):
@@ -281,7 +288,7 @@ rsync -av <cluster>:<repository path>/logs/rsl_rl/ logs/rsl_rl/
 ## Tests
 
 ```sh
-uv run pytest                              # 46 tests: 23 robot/physics, 23 clips and environments
+uv run pytest                              # 54 tests: 26 robot/physics, 28 clips and environments
 CUDA_VISIBLE_DEVICES="" uv run pytest      # CPU only (~45 s)
 uv run ruff check src tests docs && uv run ruff format --check src tests docs
 uv run python docs/render_media.py         # regenerate docs/media/
@@ -352,6 +359,20 @@ its USB plug (black) on the ring side.*
 The IMU is turned a quarter left on its mount: palm x = −IMU y, palm y = IMU x,
 palm z = IMU z (`test_imu_axes`). The hand weighs 0.823 kg with its parts.
 
+**The real hand as it runs now** (`get_leap_hand_cfg(as_built=True, feet=False,
+stiffness=MEASURED_STIFFNESS, torsion=TORSION, effort_limit=API_EFFORT_LIMIT)`),
+from docs/next_training.md, used by `Walking-Leap-Flat-*-v2` and
+`Walking-Leap-Motion-Crawl-*`:
+
+| Setting | In the model | Source |
+| --- | --- | --- |
+| Fingertips | stock (no socks): sliding friction 0.5 as in the Menagerie model | the real hand runs without socks so far |
+| Stiffness | 2.6 N·m/rad instead of 3.0 | fit to the real encoders, 2.2–3.0 fit (docs/real_hand.md) |
+| Torsional friction | condim 4; 0.003 m at the fingertips, 0.03 m on the other contacts | fit to the real IMU's heading; with it the replayed crawl turns −4.9° in 3 cycles, the real hand −4.8° (sim without it: +2.3°) |
+| Stance | folded thumb at 0.129 m (lowest tip 128 mm below the palm) | the real hand stands at about 128 mm |
+
+It stands for 4 s on its four tips at 0.054 N·m (`test_stands_on_stock_tips_folded`).
+
 **Folded-thumb stance.** With the limits above the thumb can also stand folded under
 the palm the other way round. On planted feet the palm then moves −60/+27 mm in height
 and ±41° in yaw (−18/+6 mm, −17/+34° in the nominal pose), for the same joint torque
@@ -368,6 +389,13 @@ a joint limit, 4.5 rad/s at the fastest joint.
 ![The hello clip in physics](docs/media/hello.gif)
 
 *`hello` as position targets in physics, without a policy.*
+
+**The real crawl** (`crawl`, 28.1 s, three cycles) is not written here: it is the
+real hand's scripted crawl (docs/data/real_clips/crawl.npz), its joint targets
+replayed open loop on the real hand's model (`clips.replay`), the palm following
+from physics. It moves 104 mm forward; the thumb stays on the ground 88 % of the
+time and is dragged forward with the palm (the script unloads it, it does not lift
+it).
 
 Imitation uses mjlab's motion-tracking terms (BeyondMimic) at this hand's scale. The
 actor sees the clip's joints and tilt, the encoders, the IMU's rate and gravity, and
@@ -427,7 +455,17 @@ fingertips (the thumb, the only rear support, most visibly):
   The sliding speed is that of the finger's material point at the contact, so
   rolling or pivoting on a tip is free; only sliding is penalized.
 
-No gait timing, contact sequence, reference motion or symmetry term. The weights
+v2 (`walking_leap_flat_real_env_cfg`) puts v1 on the real hand's model with
+commands scaled to its cap (vx ±0.03, vy ±0.015 m/s, yaw ±0.2 rad/s) and tracking
+kernels scaled to them (std 0.015 m/s and 0.15 rad/s: a hand that stands still
+earns 43 % and 44 % of the terms). It adds `long_air_time` (weight −1.0): the time
+each digit spends off the ground beyond 1 s, because on this hand every reward set
+of "First runs" ended with one digit held up for good, and with the sliding penalty
+lifting the thumb for good would be the cheapest way not to drag it. A hand that
+stands still has tracking errors of 0.015 m/s and 0.085 rad/s.
+
+Apart from v2's limit on how long a digit stays up, no gait timing, contact
+sequence, reference motion or symmetry term. The weights
 are initial values; v0 tracks its command with them (Status), v1 is untested.
 
 Terminations: time limit (truncation, not failure), non-finite state, palm tilt
@@ -553,11 +591,11 @@ per env), seed 42, TensorBoard logging.
   unmeasured. The animation policy (one seed) has run on the real hand in the
   shadow only (computing, not driving).
 - Walking with the as-built hand is not solved: see "First runs".
-- The walking tasks (`Walking-Leap-Flat-*`) use the nominal model, which differs
-  from the real hand: Menagerie's thumb limits (shifted by one joint against
-  LEAP's own), a 0.5 N·m torque cap where the real hand runs at 350 mA
-  (≈ 0.181 N·m, not measured; the v0 policy peaks at 0.39 N·m, "First runs"), and
-  no IMU mass. Only the motion tasks use the as-built model.
+- The walking tasks v0 and v1 use the nominal model, which differs from the real
+  hand: Menagerie's thumb limits (shifted by one joint against LEAP's own), a
+  0.5 N·m torque cap where the real hand runs at 350 mA (≈ 0.181 N·m, not
+  measured; the v0 policy peaks at 0.39 N·m, "First runs"), and no IMU mass. v2
+  and the motion tasks use the as-built model.
 - Actuator torque limit, stiffness and armature come from the LEAP authors'
   simulator, not from measurements on hardware (the real joints track like a
   2.2-3.0 N·m/rad servo at gains 1200 / 0 / 600: docs/real_hand.md); friction coefficients come from
@@ -569,10 +607,11 @@ per env), seed 42, TensorBoard logging.
   IMU at all.
 - The walking tasks have no observation noise, actuation delay or domain
   randomization (nominal physics first, by design).
-- Contacts have no torsional friction (`condim=3`): a fingertip spins on the floor
-  for free, and the simulated hand turns the other way from the real one while
-  crawling (docs/next_training.md). The v1 yaw commands may therefore be tracked
-  by spinning on the fingertips.
+- Only the real-hand tasks (`Flat-*-v2`, `Motion-Crawl-*`) have torsional friction;
+  elsewhere contacts use `condim=3`, a fingertip spins on the floor for free and the
+  simulated hand turns the other way from the real one while crawling
+  (docs/next_training.md). The v1 yaw commands may be tracked by spinning on the
+  fingertips.
 - Joint conventions differ from the LEAP hardware API: the API orders each finger
   (side, forward, pip, dip) while the MJCF orders (mcp, rot, pip, dip), and the
   API's thumb limits (`LEAPsim_limits`) differ from the Menagerie ones. Both must

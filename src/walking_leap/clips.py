@@ -6,6 +6,10 @@ its place on the ground. The result is kinematic, at the policy rate (50 Hz), in
 motion format. ``report`` says how close a clip comes to the joint limits, the motors'
 speed and losing its balance; only physics says whether it can be done.
 
+The real hand's scripted clips (docs/data/real_clips/, joint targets that ran open
+loop on the hand) become motions too: ``replay`` plays them open loop in plain MuJoCo
+on the real hand's model, and the palm follows from physics.
+
   uv run python -m walking_leap.clips          # rebuild assets/clips/*.npz and report
 """
 
@@ -24,6 +28,10 @@ from scipy.spatial import ConvexHull
 from walking_leap import robot
 
 CLIPS_DIR: Path = Path(__file__).parent / "assets" / "clips"
+# The real hand's scripted clips (git checkout only: they live outside the package).
+REAL_CLIPS_DIR: Path = Path(__file__).parents[2] / "docs" / "data" / "real_clips"
+# Real clips turned into motions by ``replay``.
+REAL_MOTIONS: tuple[str, ...] = ("crawl",)
 FPS = 50
 DIGITS = ("if", "mf", "rf", "th")
 
@@ -276,7 +284,58 @@ def solve(clip: Clip, kin: Kinematics | None = None) -> Motion:
   return Motion(clip.name, qpos, lifted, errors)
 
 
-def save(motion: Motion, kin: Kinematics, path: Path) -> None:
+class RealHand:
+  """The real hand as it runs now, on a floor (plain MuJoCo, CPU): IMU, stock
+  fingertips, LEAP's thumb limits, 350 mA, measured stiffness, torsional friction,
+  the walking tasks' physics options. The model the real clips are replayed on."""
+
+  def __init__(self) -> None:
+    from walking_leap.env_cfg import walking_leap_flat_env_cfg
+
+    cfg = robot.get_leap_hand_cfg(
+      as_built=True,
+      folded_thumb=True,
+      feet=False,
+      effort_limit=robot.API_EFFORT_LIMIT,
+      stiffness=robot.MEASURED_STIFFNESS,
+      torsion=robot.TORSION,
+    )
+    spec = Entity(cfg).spec
+    spec.worldbody.add_geom(
+      name="floor", type=mujoco.mjtGeom.mjGEOM_PLANE, size=(0, 0, 0.01)
+    )
+    self.model = spec.compile()
+    walking_leap_flat_env_cfg().sim.mujoco.apply(self.model)
+    self.data = mujoco.MjData(self.model)
+
+
+def replay(name: str, hand: RealHand, settle_s: float = 0.5) -> Motion:
+  """A real clip's joint targets, played open loop from the folded-thumb stance.
+
+  One row per target (50 Hz): the state when that target is sent. The stance is
+  settled first, with the clip's first targets. ``lifted`` and ``ik_error`` do not
+  apply (no planted-feet solve) and are left empty.
+  """
+  q = np.load(REAL_CLIPS_DIR / f"{name}.npz")["q"]
+  m, d = hand.model, hand.data
+  mujoco.mj_resetDataKeyframe(m, d, m.key("init_state").id)
+  d.qpos[7:] = q[0]
+  d.ctrl[:] = q[0]
+  mujoco.mj_forward(m, d)
+  for _ in range(round(settle_s / m.opt.timestep)):
+    mujoco.mj_step(m, d)
+  steps = round(1.0 / (FPS * m.opt.timestep))
+  qpos = np.zeros((len(q), m.nq))
+  for i, target in enumerate(q):
+    qpos[i] = d.qpos
+    d.ctrl[:] = target
+    for _ in range(steps):
+      mujoco.mj_step(m, d)
+  lifted = np.zeros((len(q), len(DIGITS)), dtype=bool)
+  return Motion(name, qpos, lifted, np.zeros(len(q)))
+
+
+def save(motion: Motion, kin: Kinematics | RealHand, path: Path) -> None:
   """Write mjlab's motion format: joints, and every body's pose and velocity."""
   m, d = kin.model, kin.data
   n = len(motion.qpos)
@@ -343,6 +402,12 @@ def main() -> None:
     motion = solve(write(), kin)
     save(motion, kin, CLIPS_DIR / f"{name}.npz")
     print(name, {k: round(v, 3) for k, v in report(motion, kin).items()})
+  hand = RealHand()
+  for name in REAL_MOTIONS:
+    motion = replay(name, hand)
+    save(motion, hand, CLIPS_DIR / f"{name}.npz")
+    moved = 1e3 * (motion.qpos[-1, :2] - motion.qpos[0, :2])
+    print(name, {"frames": len(motion.qpos), "moved_mm": moved.round(1).tolist()})
 
 
 if __name__ == "__main__":

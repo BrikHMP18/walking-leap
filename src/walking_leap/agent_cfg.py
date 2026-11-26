@@ -59,3 +59,16 @@ def walking_leap_motion_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
     experiment_name="walking_leap_motion",
     max_iterations=2_000,
   )
+
+
+def walking_leap_real_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+  """Walking on the real hand's model, rewards only (v2): 6000 iterations, as
+  IMU-free locomotion was trained for 5000 in Bhatt et al., "Blind Dexterity"
+  (arXiv:2608.29487), with some margin."""
+  return replace(walking_leap_ppo_runner_cfg(), max_iterations=6_000)
+
+
+def walking_leap_crawl_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+  """Imitating the real crawl: 3000 iterations (hello: 2000 nominal, 3000
+  randomized)."""
+  return replace(walking_leap_motion_ppo_runner_cfg(), max_iterations=3_000)
