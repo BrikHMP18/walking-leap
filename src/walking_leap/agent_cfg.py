@@ -1,5 +1,7 @@
 """PPO (RSL-RL) configuration. Algorithm values are mjlab's defaults."""
 
+from dataclasses import replace
+
 from mjlab.rl import RslRlModelCfg, RslRlOnPolicyRunnerCfg, RslRlPpoAlgorithmCfg
 
 
@@ -47,4 +49,13 @@ def walking_leap_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
     wandb_project="walking-leap",
     # W&B gets metrics only; checkpoints are archived on Hugging Face.
     upload_model=False,
+  )
+
+
+def walking_leap_motion_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+  """Same learner as walking, another experiment folder."""
+  return replace(
+    walking_leap_ppo_runner_cfg(),
+    experiment_name="walking_leap_motion",
+    max_iterations=2_000,
   )

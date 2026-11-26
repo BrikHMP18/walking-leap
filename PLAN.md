@@ -6,6 +6,7 @@ No time estimates.
 
 Scope of the current milestone: **the foundation only** (phases 1–4). No policy
 training beyond PPO smoke tests and no hardware work until phase 5 is approved.
+The trainings below that are checked come from a branch, not from this milestone.
 
 ---
 
@@ -95,7 +96,8 @@ training beyond PPO smoke tests and no hardware work until phase 5 is approved.
       recorded)
 - [x] Baseline run with the current config: job 27623314, `Walking-Leap-Flat-v0`,
       3000 iterations, seeds 42 and 43 complete, seed 44 stopped at 2700 (time
-      limit); results in README "Status"
+      limit); results in README "Status". An earlier single run (seed 42):
+      README "First runs"
 - [ ] Investigate fingertip contact flicker at rest in MuJoCo Warp (~3 % of
       policy steps without contact; absent in CPU MuJoCo); decide whether contact
       observations and metrics need a substep history or a detection margin.
@@ -104,6 +106,8 @@ training beyond PPO smoke tests and no hardware work until phase 5 is approved.
 - [x] Decide whether a standing-only command (`vx = 0`) phase is needed first:
       not needed, v0 learned to walk directly (job 27623314)
 - [ ] Evaluate alternative support poses (lower stance, different thumb placement)
+  - [x] Folded-thumb stance on the as-built hand: holds 4 s (`test_stands_on_its_feet`),
+        palm range on planted feet (README "As-built hand")
 - [ ] Confirm static support margins against the identified actuator limits
 - [ ] Stability evaluation: tilt, palm contact frequency, time without falling
 
@@ -115,6 +119,9 @@ training beyond PPO smoke tests and no hardware work until phase 5 is approved.
       middle finger on the ground 9–19 % of the time, fingertips sliding at
       1.3–1.9 cm/s while in contact. Still missing: stride frequency, slip per
       stance, rollout videos
+- [ ] Rewards for the as-built hand: the base ones are met by holding a foot up for
+      good; three sets of gait terms did not change that (README "First runs"). Those test
+      tasks are removed; next: imitate the scripted crawl (docs/next_training.md)
 - [ ] Tune reward weights, action scale, termination thresholds
 - [ ] Physical plausibility audit (saturation, penetration, impacts, reward hacking).
       Saturation 0 % in v0; fingertip sliding is the main open question
@@ -148,29 +155,64 @@ training beyond PPO smoke tests and no hardware work until phase 5 is approved.
 - [ ] Ground friction / surface variation
 - [ ] Robustness evaluation protocol
 
+### Animations (motion imitation)
+- [x] Clips written as keyframes, solved with planted feet (`tests/test_motion.py`)
+- [x] Imitation environment whose actor sees encoders and IMU only
+      (`test_actor_sees_only_encoders_and_imu`)
+- [x] `hello` imitated in simulation, nominal and randomized, with and without the
+      cables' pull (`test_cables_pull_and_change`): README "First runs"
+- [ ] Measure the cables' pull on the bench, set `CABLE_FORCE` from it
+- [ ] The cables' pull in the walking tasks (a dragged cable is not a steady force)
+- [ ] Several seeds; several clips with one policy
+- [ ] The same clips with a learned world model
+- [ ] Clips recorded from a human hand
+
 ---
 
-## Milestone C — Real hardware (not started)
+## Milestone C — Real hardware (started: scripted motions, see docs/real_hand.md)
 
 ### Phase 9 — Sim-to-real preparation
 - [ ] Measure real hand mass and inertia (with IMU, cables, mounts)
+  - [x] Feet and IMU in the model, from CAD and datasheets (`tests/test_as_built.py`);
+        weights, grip and fit not measured
 - [ ] Actuator identification: torque at the configured current limit, gains, armature, friction
+  - [x] Stiffness at gains 1200 / 0 / 600 from five scripted runs replayed in simulation:
+        2.2-3.0 N·m/rad (docs/real_hand.md, "Simulation against the real hand"); torque per
+        amp not measured
+  - [x] Contact friction against the same runs: the heading gap is torsional friction the
+        model leaves out (`condim=3`); 0.003 m at the tips and 0.03 m elsewhere halve it
+        (docs/next_training.md). Not in the model yet
 - [ ] Reconcile joint conventions: hardware order (side, forward, pip, dip) vs. MJCF
       (mcp, rot, pip, dip); thumb limits in `LEAPsim_limits` vs. Menagerie
-- [ ] IMU choice and mounting; sensor noise models (only if the NoImu-v1
-      ablation shows the IMU is needed)
+  - [x] Thumb limits: the as-built hand uses LEAP's own
+        (`test_thumb_limits_are_leaps_own`); the walking tasks still use Menagerie's
+  - [x] Joint order on the hardware: each joint moved alone, and every scripted clip in
+        docs/real_hand.md played as in simulation
+- [ ] IMU choice and mounting; sensor noise models
+  - [x] TM171 on the back of the hand; gravity x and y and gyro x and y checked against the
+        simulation on the hand (docs/real_hand.md); yaw axis and noise model not yet
+  - [ ] Whether walking needs it: the `Walking-Leap-Flat-NoImu-v1` ablation (phase 7)
 - [ ] Communication latency (Dynamixel bus) and observation/action delay
 - [ ] Domain randomization (only after nominal physics is validated)
+  - [ ] Ranges centered on the real hand's numbers (docs/next_training.md)
 - [ ] Policy export (ONNX) and inference timing
+  - [x] The animation policy in plain numpy, equal to its ONNX export within 3e-7; runs in
+        the 50 Hz loop with the loop under 1 ms late typically
 
 ### Phase 10 — Hardware deployment
 - [ ] Hardware control loop on the LEAP Hand API
+  - [x] A 50 Hz loop on our own driver (not public): scripted clips and the animation
+        policy in the shadow, guards and full logs (docs/real_hand.md, "How it was run")
 - [ ] Joint mapping and calibration
 - [ ] IMU integration
 - [ ] Safety limits and emergency stop
+  - [x] Stops at 40° of tilt, 15° from the simulation's prediction, a motor error, a silent
+        sensor, a motor at its limit for 1.5 s, or on request (lies down first)
 - [ ] Supported (suspended) first experiments
 - [ ] Incremental free-standing tests
+  - [x] Scripted: stand up, push-ups, sway, finger taps (docs/real_hand.md)
 - [ ] Real-world locomotion
+  - [x] A scripted, quasi-static crawl: 12+ cm in six cycles (one measurement)
 
 ## Milestone D — Release
 

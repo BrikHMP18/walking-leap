@@ -16,6 +16,7 @@ import numpy as np
 from mjlab.entity import Entity
 
 from walking_leap import robot
+from walking_leap.clips import CLIPS_DIR
 from walking_leap.env_cfg import ACTION_SCALE, walking_leap_flat_env_cfg
 
 OUT = Path(__file__).parent / "media"
@@ -23,8 +24,8 @@ FPS = 15
 GIF_SIZE = (240, 320)  # (height, width)
 
 
-def build_model() -> mujoco.MjModel:
-  spec = Entity(robot.get_leap_hand_cfg()).spec
+def build_model(**hand) -> mujoco.MjModel:
+  spec = Entity(robot.get_leap_hand_cfg(**hand)).spec
   spec.add_texture(
     name="sky",
     type=mujoco.mjtTexture.mjTEXTURE_SKYBOX,
@@ -86,17 +87,50 @@ def options(frames: bool = False, contacts: bool = False) -> mujoco.MjvOption:
   return opt
 
 
-def render_nominal_pose(m: mujoco.MjModel) -> None:
-  """Three views of the nominal pose after settling; palm frame and contacts."""
+def render_pose(m: mujoco.MjModel, name: str, views: tuple, **opt_kwargs) -> None:
+  """Views of the initial pose after settling 1 s on the feet."""
   d = nominal_data(m)
-  for _ in range(500):  # settle 1 s on the tips
+  for _ in range(500):
     mujoco.mj_step(m, d)
   with mujoco.Renderer(m, height=420, width=560) as r:
-    views = []
-    for az, el in ((135.0, -20.0), (90.0, -5.0), (180.0, -5.0)):
-      r.update_scene(d, camera(d, az, el), options(frames=True, contacts=True))
-      views.append(r.render())
-  mediapy.write_image(OUT / "nominal_pose.png", np.concatenate(views, axis=1))
+    images = []
+    for az, el in views:
+      r.update_scene(d, camera(d, az, el), options(**opt_kwargs))
+      images.append(r.render())
+  mediapy.write_image(OUT / name, np.concatenate(images, axis=1))
+
+
+def render_nominal_pose(m: mujoco.MjModel) -> None:
+  """Three views of the nominal pose; palm frame and contacts."""
+  views = ((135.0, -20.0), (90.0, -5.0), (180.0, -5.0))
+  render_pose(m, "nominal_pose.png", views, frames=True, contacts=True)
+
+
+def render_as_built(m: mujoco.MjModel) -> None:
+  """The hand with its feet and IMU, folded-thumb stance."""
+  render_pose(m, "as_built.png", ((135.0, -20.0), (90.0, -5.0), (150.0, -60.0)))
+
+
+def render_hello(m: mujoco.MjModel) -> None:
+  """The `hello` clip's joints as position targets, in physics: no policy."""
+  fps = 10
+  clip = np.load(CLIPS_DIR / "hello.npz")
+  d = nominal_data(m)
+  d.qpos[:] = np.r_[
+    clip["body_pos_w"][0, 0], clip["body_quat_w"][0, 0], clip["joint_pos"][0]
+  ]
+  mujoco.mj_forward(m, d)
+  view = camera(d, 135.0, -14.0, distance=0.5)  # Fixed: the palm's moves are the point.
+  frames = []
+  with mujoco.Renderer(m, *GIF_SIZE) as r:
+    for i, target in enumerate(clip["joint_pos"]):
+      d.ctrl[:] = target
+      for _ in range(10):
+        mujoco.mj_step(m, d)
+      if i % (int(clip["fps"][0]) // fps) == 0:
+        r.update_scene(d, view)
+        frames.append(r.render())
+  mediapy.write_video(OUT / "hello.gif", frames, fps=fps, codec="gif")
 
 
 def record(m, d, seconds, controller=None, cam_args=(135.0, -20.0), **opt_kwargs):
@@ -163,6 +197,11 @@ def main() -> None:
   render_standing(m)
   render_joint_sweep(m)
   render_random_actions(m)
+  as_built = build_model(
+    as_built=True, folded_thumb=True, effort_limit=robot.API_EFFORT_LIMIT
+  )
+  render_as_built(as_built)
+  render_hello(as_built)
   for f in sorted(OUT.iterdir()):
     print(f"{f.relative_to(OUT.parent.parent)}: {f.stat().st_size / 1e6:.2f} MB")
 

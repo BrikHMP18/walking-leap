@@ -20,7 +20,10 @@ maintainer's explicit approval.
 - One responsibility per file:
   - `robot.py` — MJCF loading and every modification of it, actuators,
     collisions, nominal pose. The asset XML itself is never edited.
-  - `env_cfg.py` — the environment as configuration.
+  - `env_cfg.py` — the walking environment as configuration.
+  - `motion_cfg.py` — the motion-imitation environment as configuration.
+  - `clips.py` — the reference animations, as keyframes. `assets/clips/*.npz` is its
+    output, never edited (`test_hello_file_is_up_to_date`).
   - `agent_cfg.py` — PPO / networks.
   - `mdp.py` — only MDP terms mjlab does not have. Reuse
     `mjlab.envs.mdp` and `mjlab.tasks.velocity.mdp` first. Split `mdp.py`
@@ -28,9 +31,10 @@ maintainer's explicit approval.
 - Configuration-driven: thresholds, weights and scales are config values, not
   constants buried in functions.
 - Register new variants with `register_mjlab_task` in `__init__.py`; task IDs
-  follow `Walking-Leap-<Terrain>[-<Variant>]-v<N>` (e.g.
-  `Walking-Leap-Flat-NoImu-v1`). Bump `N` when the task changes; never change
-  what an existing ID trains.
+  follow `Walking-Leap-<Terrain>[-<Variant>]-v<N>` for walking (e.g.
+  `Walking-Leap-Flat-NoImu-v1`) and `Walking-Leap-Motion-<Terrain>-v<N>` for
+  motion imitation. Bump `N` when the task changes; never change what an
+  existing ID trains.
 - Style: ruff, 2-space indentation (mjlab's convention), type hints, short
   docstrings that state units and frames.
 

@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import torch
 from mjlab.managers.command_manager import CommandTerm
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.sensor import ContactSensor
+from mjlab.tasks.tracking.mdp import MotionCommand
 from mjlab.tasks.velocity.mdp import UniformVelocityCommand, UniformVelocityCommandCfg
+from mjlab.utils.lab_api.math import quat_apply_inverse
 
 if TYPE_CHECKING:
   from mjlab.entity import Entity
@@ -41,7 +43,7 @@ class VelocityCommandCfg(UniformVelocityCommandCfg):
 
 
 ##
-# Observations (critic only: privileged).
+# Observations (critic only: privileged, unless said otherwise).
 ##
 
 
@@ -51,6 +53,17 @@ def root_height(
   """Palm-origin height above the (flat, z=0) ground. Shape [B, 1]."""
   asset: Entity = env.scene[asset_cfg.name]
   return asset.data.root_link_pos_w[:, 2:3]
+
+
+def motion_gravity(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
+  """Gravity direction in the reference palm's frame. Shape [B, 3].
+
+  The part of the reference's orientation an IMU can follow: no heading. For the
+  actor, next to ``projected_gravity`` (the same of the real palm).
+  """
+  command = cast(MotionCommand, env.command_manager.get_term(command_name))
+  asset: Entity = env.scene[command.cfg.entity_name]
+  return quat_apply_inverse(command.anchor_quat_w, asset.data.gravity_vec_w)
 
 
 ##

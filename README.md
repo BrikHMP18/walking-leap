@@ -13,24 +13,38 @@ blue +z = back of the hand. Orange dots are the four ground contacts.*
 
 ## Status
 
-**Foundation complete; first baseline trained.** `Walking-Leap-Flat-v0`
-(constant forward command) was trained on Rorqual (Slurm job 27623314, 3000 PPO
-iterations, 4096 envs). Seeds 42 and 43 move at 0.049 m/s for a commanded
-0.05 m/s (0.49–0.50 m per 10 s episode), never fall and never touch the palm;
-seed 44 stopped at iteration 2700 on the job's time limit. The emergent gait is
-a tripod (index, ring, thumb) with the middle finger lifted most of the time
-(ground contact 9–19 %), and the fingertips slide at 1.3–1.9 cm/s while in
-contact: the hand partly steps and partly drags, which may not transfer to
-hardware. Numbers are the last-iteration `Episode_Metrics` of runs
-`2026-11-25_11-43-22` (seed 42) and `2026-11-25_11-41-44` (seed 43).
-Omnidirectional commands, a fingertip-sliding penalty and an IMU-free actor
-(`v1`) are implemented and not yet trained. See [PLAN.md](PLAN.md).
+**New here: [docs/handoff.md](docs/handoff.md)** (the as-built hand, the animations,
+the real hand and what to train next).
+
+**Foundation, first policies in simulation, scripted runs on the real hand.**
+
+- **Walking, nominal model** (`Walking-Leap-Flat-v0`, constant 0.05 m/s forward):
+  trained on Rorqual (Slurm job 27623314, 3000 PPO iterations, 4096 envs). Seeds 42
+  and 43 move at 0.049 m/s (0.49–0.50 m per 10 s episode), never fall and never
+  touch the palm; seed 44 stopped at iteration 2700 on the job's time limit. The
+  gait is a tripod (index, ring, thumb) with the middle finger lifted most of the
+  time (ground contact 9–19 %), and the fingertips slide at 1.3–1.9 cm/s while in
+  contact: the hand partly steps and partly drags. Numbers: last-iteration
+  `Episode_Metrics` of runs `2026-11-25_11-43-22` (seed 42) and
+  `2026-11-25_11-41-44` (seed 43). An earlier single run is in "First runs".
+- **Walking with the as-built hand** is not solved by rewards alone ("First runs").
+- **Animation:** one clip (`hello`) is learned by imitation, one seed ("First runs").
+- **On the real hand** (scripts only, no policy driving yet): it stands up on its
+  own, does push-ups, lifts one finger at a time and crawls forward 12+ cm in six
+  scripted cycles; the simulator's gravity direction matches the real IMU's within
+  about 1.6° on average ([docs/real_hand.md](docs/real_hand.md)).
+- **Implemented, not yet trained:** omnidirectional commands with a
+  fingertip-sliding penalty (`Walking-Leap-Flat-v1`) and its IMU-free variant
+  (`-NoImu-v1`), both on the nominal model.
+
+What the next training batch should change, from all of it:
+[docs/next_training.md](docs/next_training.md). See [PLAN.md](PLAN.md).
 
 | Zero action: drops ≤ 5 mm and stands | Joint sweep (gravity off): each digit in turn | Random actions: untrained behavior |
 | :---: | :---: | :---: |
 | ![zero action](docs/media/zero_action.gif) | ![joint sweep](docs/media/joint_sweep.gif) | ![random actions](docs/media/random_actions.gif) |
 
-All media are rendered by [`docs/render_media.py`](docs/render_media.py) with
+All media but the real hand's (`docs/media/real_*.png`, `standup_sim.png`: from logs) are rendered by [`docs/render_media.py`](docs/render_media.py) with
 the same model, physics options and action mapping as the environment.
 
 ## Technical stack
@@ -48,20 +62,31 @@ the same model, physics options and action mapping as the environment.
 
 ```
 src/walking_leap/
-  __init__.py      Registers Walking-Leap-Flat-v0 (loaded via the mjlab.tasks entry point)
-  robot.py         MJCF loading, floating base, actuators, collisions, nominal pose
-  env_cfg.py       Scene, sim, observations, actions, command, rewards, terminations, metrics
+  __init__.py      Registers the tasks (loaded via the mjlab.tasks entry point)
+  robot.py         MJCF loading, floating base, actuators, collisions, poses, add-on parts
+  env_cfg.py       Walking: scene, sim, observations, actions, command, rewards, terminations
+  motion_cfg.py    Motion imitation: the same for playing a reference animation
+  clips.py         The animations, written as keyframes and solved with planted feet
   agent_cfg.py     PPO runner / network configuration
   mdp.py           The few MDP terms mjlab does not provide
   assets/leap_hand/  Unmodified MuJoCo Menagerie right_hand.xml + meshes (MIT)
+  assets/parts/    Feet, IMU cover and pad (see "As-built hand"; licences inside)
+  assets/clips/    Solved animations, written by clips.py
 cluster/
   env.sh           uv locations on Alliance Canada clusters (sourced by jobs)
   train.sbatch     Slurm job: one training run (one per array task)
 tests/
   test_robot.py    Model structure and physics (plain MuJoCo, CPU)
-  test_env.py      mjlab environment (GPU if available, else CPU)
+  test_as_built.py The same for the hand with its parts
+  test_env.py      mjlab walking environment (GPU if available, else CPU)
+  test_motion.py   Animations and the motion-imitation environment
 docs/
   render_media.py  Renders the README images/GIFs into docs/media/
+  real_hand.md     The first runs on the real hand: what ran, sim against real
+  handoff.md       Start here: what this branch adds, how to run it, what to train next
+  next_training.md What the next training batch should change, and why
+  data/real_clips/ The joint targets the real hand played (50 Hz, with the sim's IMU reading)
+hardware/          The printed parts, latest versions: IMU mount, foot socks (STL, STEP, licences)
 PLAN.md            Roadmap and verified progress
 AGENTS.md          Conventions for contributors and coding agents
 ```
@@ -78,15 +103,24 @@ uv sync
 uv run list-envs        # the three Walking-Leap-Flat-* tasks must be listed
 ```
 
+| Task | Hand | What |
+| --- | --- | --- |
+| `Walking-Leap-Flat-v0` | stock | walk forward |
+| `Walking-Leap-Motion-Flat-v0` | as built, 350 mA | play an animation |
+| `Walking-Leap-Motion-Flat-v1` | as built, 350 mA | the same, with kicks, cables, noise, delay and random numbers |
+
 ## Usage
 
-Tasks (all on flat ground, same robot, physics, actions and reward terms):
+Tasks (all on flat ground; walking tasks share the nominal robot, physics, actions
+and reward terms; motion tasks use the as-built hand, see "Animations"):
 
 | Task | Velocity command (palm frame) | Actor observations |
 | --- | --- | --- |
 | `Walking-Leap-Flat-v0` | constant 0.05 m/s forward | 57: encoders + palm IMU |
 | `Walking-Leap-Flat-v1` | vx ±0.05, vy ±0.03 m/s, yaw ±0.3 rad/s; resampled every 3–5 s, 15 % zero | 57: encoders + palm IMU |
 | `Walking-Leap-Flat-NoImu-v1` | as v1 | 51: encoders only |
+| `Walking-Leap-Motion-Flat-v0` | imitate the `hello` clip, as-built hand, nothing random | 89: encoders + palm IMU + the reference |
+| `Walking-Leap-Motion-Flat-v1` | as Motion-v0, with kicks, sensor noise, delay, random grip, balance and motors, cable pull | 89 |
 
 Visualize the environment without a policy (`--viewer native` opens a MuJoCo
 window; `--viewer viser` serves a web viewer at http://localhost:8080):
@@ -120,6 +154,16 @@ uv run play Walking-Leap-Flat-v0 \
 
 Any config field can be overridden from the CLI (`--env.<field>`,
 `--agent.<field>`); see `uv run train Walking-Leap-Flat-v0 --help`.
+
+Animations (see "Animations"):
+
+```sh
+uv run python -m walking_leap.clips      # rebuild assets/clips/*.npz after an edit
+uv run train Walking-Leap-Motion-Flat-v1 --env.scene.num-envs 4096
+uv run play Walking-Leap-Motion-Flat-v1 \
+  --motion-file src/walking_leap/assets/clips/hello.npz \
+  --checkpoint-file logs/rsl_rl/walking_leap_motion/<date_time>/model_<iteration>.pt
+```
 
 ## Checkpoints
 
@@ -162,7 +206,8 @@ their own GPU type there.
   the /project file quota is shared by the whole group. Scratch is purged after
   inactivity; if a job fails at import, rerun `uv sync --frozen` on a login node.
 - torch in `uv.lock` is built for CUDA 13.2, so compute nodes need an NVIDIA
-  driver ≥ 580. Not yet verified on Rorqual: check `nvidia-smi` in the test job.
+  driver ≥ 580; the Rorqual H100 nodes have one (training ran in jobs 27622927
+  and 27623314).
 - Jobs log to Weights & Biases in offline mode (compute nodes have no internet)
   and still write the TensorBoard files. W&B receives metrics only
   (`upload_model=False`); checkpoints are archived on Hugging Face. After a
@@ -236,7 +281,7 @@ rsync -av <cluster>:<repository path>/logs/rsl_rl/ logs/rsl_rl/
 ## Tests
 
 ```sh
-uv run pytest                              # 27 tests: 14 robot/physics, 13 environment
+uv run pytest                              # 46 tests: 23 robot/physics, 23 clips and environments
 CUDA_VISIBLE_DEVICES="" uv run pytest      # CPU only (~45 s)
 uv run ruff check src tests docs && uv run ruff format --check src tests docs
 uv run python docs/render_media.py         # regenerate docs/media/
@@ -284,6 +329,49 @@ drift over 4 s. It is a tall stance; whether it suits walking is open (phase 5).
 touch the ground and the other digits (Menagerie's contact exclusions, palm vs.
 proximal links and between finger bases, are kept). Friction comes from the model: 0.5 on fingertips, 0.2 elsewhere
 (not measured).
+
+### As-built hand (`robot.py`, `as_built=True`)
+
+What goes on the real hand on top of the stock one, as child bodies without joints.
+**Nothing here is measured yet**: the numbers are CAD, datasheets and assumptions, and
+`robot.py` says which is which.
+
+| Part | In the model | Source |
+| --- | --- | --- |
+| Feet: a thin TPU 95A sock on each fingertip (designed, not printed yet) | one 64-point convex mesh each, 4.8 g, 2.2 mm longer than the tip, friction 0.6 (expect 0.4 to 0.9), soft contact | CAD; friction and softness assumed |
+| IMU: SYD TransducerM TM171 on a thin pad, under a cover on three M6 bolts of the back lid (printed, not weighed) | 58 g with its USB plug, centre at (-56, -35, 18) mm from the palm origin, one contact box without the bosses and the plug, site `imu`, sensors `imu_ang_vel` and `imu_upvector` in the IMU's own axes | datasheet and CAD; bolts and plug assumed |
+| Cables: the IMU's USB, the hand's USB and power | not modelled as bodies; `Walking-Leap-Motion-Flat-v1` pulls on the IMU mount and the palm with a random steady force (up to 0.15 N an axis each) and torque (0.01 N·m), changed every 1 to 4 s | guessed |
+| Thumb limits | `th_axl` -0.47..2.443, `th_mcp` -1.20..1.90 rad | LEAP authors' URDF and API; Menagerie's file has them shifted by one joint |
+| Torque cap | 0.181 N·m: 350 mA, the API's default, on the datasheet's stall point | estimated |
+
+![As-built hand: three views](docs/media/as_built.png)
+
+*As-built hand in the folded-thumb stance: orange feet, the IMU under its blue cover,
+its USB plug (black) on the ring side.*
+
+The IMU is turned a quarter left on its mount: palm x = −IMU y, palm y = IMU x,
+palm z = IMU z (`test_imu_axes`). The hand weighs 0.823 kg with its parts.
+
+**Folded-thumb stance.** With the limits above the thumb can also stand folded under
+the palm the other way round. On planted feet the palm then moves −60/+27 mm in height
+and ±41° in yaw (−18/+6 mm, −17/+34° in the nominal pose), for the same joint torque
+(about 0.06 N·m at the hardest joint). The as-built tasks start from it.
+
+### Animations (`clips.py`, `motion_cfg.py`)
+
+A clip is a path of the palm plus finger gestures, written by hand. Feet that are not
+lifted stay planted: their joints are solved frame by frame. `hello` (22.4 s): two
+push-ups, a stretch, hip circles, look left and right, wave with the index, drum the
+fingers, bow. `clips.report` gives its margins: 7.8 mm of balance at worst, 0.1 rad from
+a joint limit, 4.5 rad/s at the fastest joint.
+
+![The hello clip in physics](docs/media/hello.gif)
+
+*`hello` as position targets in physics, without a policy.*
+
+Imitation uses mjlab's motion-tracking terms (BeyondMimic) at this hand's scale. The
+actor sees the clip's joints and tilt, the encoders, the IMU's rate and gravity, and
+its last action (89 numbers): never its position or heading.
 
 ### Environment (`env_cfg.py`)
 
@@ -360,6 +448,75 @@ sliding of each fingertip (`tip_slip_rate_{if,mf,rf,th}`: m/s while in
 contact, 0 while lifted, so its mean is the distance slid per second), which
 shows whether a particular digit, such as the thumb, is dragged.
 
+### First runs
+
+One seed (42) each, 4,096 environments, default PPO. Metrics are independent of the
+reward, over one 10 s rollout (walking) or 128 rollouts of the whole clip (animation).
+
+**Walking**, 0.05 m/s commanded. Torque above 0.181 N·m is what 350 mA could not give.
+
+| Run | Result |
+| --- | --- |
+| `Walking-Leap-Flat-v0`, 3,000 iterations (`logs/rsl_rl/walking_leap_flat/2026-11-24_20-38-51_baseline_v0`) | walks 0.50 m in 10 s without falling, tilt under 1.2°, heading off by 15°; a small-step shuffle at 2 Hz, the thumb tapping 6 times a second; 0.9 % of joint-steps above 0.181 N·m, peak 0.39 |
+| As built, base rewards, stopped at 420 | 0.48 m, but on three fingers: the thumb never touches the ground, motors at their cap 16 % of the time. The base rewards do not stop it |
+| As built, first gait terms, stopped at 1,800 | a reward for time in the air was met by balancing on the middle finger and the thumb, 0.45 m. Term removed |
+| As built, second gait terms (at most one foot up), stopped at 430 | the index held up for good (2 % contact), 0.42 m in 10 s |
+| As built, third gait terms, 3,000 iterations (`logs/rsl_rl/walking_leap_flat/2026-11-24_22-03-48_as_built_crawl`) | slow real steps (0.67 Hz) on three digits, 0.027 m/s, 0.26 m in 10 s, turning 56° on the way; the index stays up 95 % of the time; motors at their cap 2.3 % of joint-steps |
+
+The as-built walking tasks of these runs (`Flat-v1` and `-v2` with gait terms) were tests and are
+no longer in the repository: their results stay here. The next try imitates the scripted
+crawl instead (docs/next_training.md). The walking runs had an earlier IMU holder (47 g instead of 58). The cover gained room
+for the board's pins after the animation runs: its masses in the model are the same, its
+contact box is 0.9 mm longer. The "randomized, cables" policy replayed on it stays within
+1 point of its column below.
+
+**Animation** `hello`: "nominal" (`Walking-Leap-Motion-Flat-v0`, 2,000 iterations,
+`logs/rsl_rl/walking_leap_motion/2026-11-25_01-19-49_v3_nominal`), "randomized, cables"
+(`-v1`, 3,000, `2026-11-25_00-41-24_v3_cables`) and the same without the cables' pull
+("randomized", 3,000, `2026-11-25_00-41-26_v3_nocables`), against playing the clip's
+joints as targets without a policy. Finished means upright to the end of the clip; the
+distance is the mean error of the tracked links, root-relative.
+
+| Change | Clip as targets | Nominal | Randomized | Randomized, cables |
+| --- | --- | --- | --- | --- |
+| as designed | 100 % (2.0 mm) | 100 % (2.3 mm) | 100 % (1.5 mm) | 100 % (1.8 mm) |
+| softer motors (2.0 N·m/rad instead of 3.0) | 96 % (3.2 mm) | 100 % (2.6 mm) | 100 % (1.8 mm) | 100 % (2.0 mm) |
+| much softer motors (1.4 N·m/rad) | 13 % (5.1 mm) | 100 % (3.4 mm) | 100 % (2.7 mm) | 100 % (2.7 mm) |
+| weaker motors (0.13 N·m) | 100 % (17.0 mm) | 100 % (2.8 mm) | 100 % (1.5 mm) | 100 % (1.8 mm) |
+| commands 40 ms late | 95 % (4.3 mm) | 98 % (3.7 mm) | 98 % (2.7 mm) | 98 % (3.2 mm) |
+| friction 0.4 | 100 % (2.0 mm) | 100 % (2.4 mm) | 100 % (1.5 mm) | 100 % (1.8 mm) |
+| friction 0.3 | 100 % (2.0 mm) | 100 % (2.4 mm) | 100 % (1.6 mm) | 100 % (1.8 mm) |
+| 60 g more on the back | 0 % (3.0 mm) | 100 % (2.3 mm) | 100 % (1.5 mm) | 100 % (1.8 mm) |
+| encoders off by up to 0.03 rad | 65 % (3.0 mm) | 98 % (3.1 mm) | 100 % (2.3 mm) | 100 % (2.5 mm) |
+| kicked every 2 s, up to 0.10 m/s | 87 % (2.1 mm) | 98 % (2.3 mm) | 100 % (1.6 mm) | 100 % (1.9 mm) |
+| kicked, up to 0.20 m/s | 53 % (2.4 mm) | 72 % (2.6 mm) | 75 % (1.9 mm) | 76 % (2.2 mm) |
+| kicked, up to 0.30 m/s | 30 % (3.0 mm) | 38 % (3.2 mm) | 46 % (2.3 mm) | 48 % (2.7 mm) |
+| cables pulling as guessed (As-built hand) | 66 % (2.3 mm) | 99 % (2.4 mm) | 100 % (1.6 mm) | 100 % (1.9 mm) |
+| cables pulling twice that | 32 % (3.1 mm) | 72 % (2.8 mm) | 90 % (1.8 mm) | 97 % (2.0 mm) |
+| cables pulling three times that | 15 % (4.1 mm) | 37 % (3.8 mm) | 55 % (2.3 mm) | 74 % (2.3 mm) |
+| a bit of everything: 2.0 N·m/rad, 0.15 N·m, 30 ms late, friction 0.5, 30 g more, encoders 0.02 rad, kicks 0.10 m/s | 36 % (13.2 mm) | 77 % (4.6 mm) | 98 % (2.9 mm) | 100 % (2.9 mm) |
+| the same, and the cables | 27 % (10.1 mm) | 49 % (5.7 mm) | 88 % (3.1 mm) | 95 % (3.0 mm) |
+
+A steady force at the IMU's USB plug, for the whole clip: the largest pull (N) that all 32
+hands of a direction finished (0.1, 0.2, 0.3, 0.4, 0.6, 0.8, 1.2 N tried; 0 means 0.1 N
+was already too much). The cable leaves on the ring side.
+
+| Pull towards | Clip as targets | Nominal | Randomized | Randomized, cables |
+| --- | --- | --- | --- | --- |
+| fingers | 0.8 | 0.6 | 0.8 | 1.2 |
+| wrist | 0 | 0.3 | 0.4 | 0.8 |
+| thumb side | 0.4 | 0.6 | 0.8 | 0.8 |
+| ring side | 0 | 0.3 | 0.4 | 0.6 |
+| down | 0.1 | 0.4 | 0.8 | 1.2 |
+
+With 128 rollouts a cell is good to about 3 points near 100 % and 9 near 50 %. Friction
+reaches the simulator (checked by reading it back): the clip is slow and its feet stand
+nearly straight, so it needs little of it. Most falls are in the wave, on three feet; with
+late commands they come in the first second, for all four. The randomized policies were
+trained on ranges that include most of the last rows' values, and all of this is the
+simulator the policies learned in. An earlier nominal run, same seed, on the 47 g holder
+ended with 1.5 mm of link error instead of 2.3: one seed says little about small gaps.
+
 ### PPO (`agent_cfg.py`)
 
 RSL-RL PPO through mjlab's runner: separate actor and critic MLPs
@@ -391,22 +548,39 @@ per env), seed 42, TensorBoard logging.
 
 ## Known limitations
 
-- Only forward walking at one speed (v0) is trained. Its gait relies partly on
-  fingertip sliding, whose real-world friction is unmeasured.
+- Walking is trained at one speed on the nominal model only (`Flat-v0`, simulation).
+  Its gait relies partly on fingertip sliding, whose real-world friction is
+  unmeasured. The animation policy (one seed) has run on the real hand in the
+  shadow only (computing, not driving).
+- Walking with the as-built hand is not solved: see "First runs".
+- The walking tasks (`Walking-Leap-Flat-*`) use the nominal model, which differs
+  from the real hand: Menagerie's thumb limits (shifted by one joint against
+  LEAP's own), a 0.5 N·m torque cap where the real hand runs at 350 mA
+  (≈ 0.181 N·m, not measured; the v0 policy peaks at 0.39 N·m, "First runs"), and
+  no IMU mass. Only the motion tasks use the as-built model.
 - Actuator torque limit, stiffness and armature come from the LEAP authors'
-  simulator, not from measurements on hardware; friction coefficients come from
+  simulator, not from measurements on hardware (the real joints track like a
+  2.2-3.0 N·m/rad servo at gains 1200 / 0 / 600: docs/real_hand.md); friction coefficients come from
   the Menagerie model.
-- The v0/v1 actors use angular velocity and gravity direction that would need
-  an IMU on the palm; its mass, noise and latency are not modelled.
-  `Walking-Leap-Flat-NoImu-v1` tests whether the IMU is needed at all.
-- No observation noise, actuation delay or domain randomization (nominal physics
-  first, by design).
+- The walking actors (except `-NoImu-v1`) and the motion actors use angular
+  velocity and gravity direction from a palm IMU; its mass is modelled in the
+  as-built hand, its noise and latency only in the randomized animation task
+  (`-Motion-Flat-v1`). `Walking-Leap-Flat-NoImu-v1` tests whether walking needs the
+  IMU at all.
+- The walking tasks have no observation noise, actuation delay or domain
+  randomization (nominal physics first, by design).
+- Contacts have no torsional friction (`condim=3`): a fingertip spins on the floor
+  for free, and the simulated hand turns the other way from the real one while
+  crawling (docs/next_training.md). The v1 yaw commands may therefore be tracked
+  by spinning on the fingertips.
 - Joint conventions differ from the LEAP hardware API: the API orders each finger
   (side, forward, pip, dip) while the MJCF orders (mcp, rot, pip, dip), and the
   API's thumb limits (`LEAPsim_limits`) differ from the Menagerie ones. Both must
   be reconciled before deployment.
 - The hand's real mass is not verified (no official figure found); the model
   has 0.746 kg.
+- The as-built hand's feet are designed, not printed; the IMU holder is printed, not
+  weighed. Weights and grip are CAD and assumptions. The folded-thumb stance works on the real hand (docs/real_hand.md).
 - Static support is verified in simulation only, for one nominal pose.
 
 ## References and acknowledgments
@@ -426,4 +600,5 @@ per env), seed 42, TensorBoard logging.
 ## License
 
 MIT (see [LICENSE](LICENSE)). The LEAP Hand model keeps its own MIT license in
-`src/walking_leap/assets/leap_hand/LICENSE`.
+`src/walking_leap/assets/leap_hand/LICENSE`. The foot socks' meshes are adapted from
+LEAP Hand CAD and are CC BY-SA 4.0 (`src/walking_leap/assets/parts/LICENSE`).
