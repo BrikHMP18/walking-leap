@@ -1,0 +1,4 @@
+#!/bin/bash
+# Walking Leap's IMU (TM171), see README.md next to this file. ROS is kept out of Python.
+here="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+exec env -u PYTHONPATH PYTHONNOUSERSITE=1 /usr/bin/python3 "$here/tm171.py" "$@"

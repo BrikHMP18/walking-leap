@@ -90,6 +90,8 @@ tests/
   test_as_built.py The same for the hand with its parts
   test_env.py      mjlab walking environment (GPU if available, else CPU)
   test_motion.py   Animations and the motion-imitation environment
+  test_real_loop.py The real hand's loop: clips, policy inputs in the task's order
+  test_tm171.py    The IMU's reader, without the IMU
 docs/
   render_media.py  Renders the README images/GIFs into docs/media/
   real_hand.md     The first runs on the real hand: what ran, sim against real
@@ -97,6 +99,7 @@ docs/
   next_training.md What the next training batch should change, and why
   data/real_clips/ The joint targets the real hand played (50 Hz, with the sim's IMU reading)
 hardware/          The printed parts, latest versions: IMU mount, foot socks (STL, STEP, licences)
+real/              The real hand's control loop, the IMU's reader, a policy's export: start at real/README.md
 scripts/
   scripted_gaits.py    Scripted gaits, no learning: the keyboard-steered crawl, two-digit trials
   crawl_loop.py        A 40-cycle crawl clip, to watch a crawl policy keep going
