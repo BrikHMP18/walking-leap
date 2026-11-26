@@ -99,7 +99,8 @@ The trainings below that are checked come from a branch, not from this milestone
 - [ ] Train forward walking at 0.05 m/s; several seeds (one so far: README "First runs")
 - [ ] Analyze the emergent gait (contact patterns per digit, slip, palm contact)
 - [ ] Rewards for the as-built hand: the base ones are met by holding a foot up for
-      good; three sets of gait terms did not change that (README "First runs")
+      good; three sets of gait terms did not change that (README "First runs"). Those test
+      tasks are removed; next: imitate the scripted crawl (docs/next_training.md)
 - [ ] Tune reward weights, action scale, termination thresholds
 - [ ] Physical plausibility audit (saturation, penetration, impacts, reward hacking)
 - [ ] Locomotion metrics reported separately from reward

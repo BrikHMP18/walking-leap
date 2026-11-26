@@ -89,65 +89,6 @@ def root_height_floor(
   return torch.exp(-torch.square(shortfall / std))
 
 
-def footprint(
-  env: ManagerBasedRlEnv,
-  spots: tuple[tuple[float, float], ...],
-  std: float,
-  asset_cfg: SceneEntityCfg = _ROBOT,
-) -> torch.Tensor:
-  """exp(-mean over feet of (distance to its spot / std)^2), xy in the palm frame.
-
-  Pulls every foot toward its place in the standing pose without saying when to step
-  ("Fingers as Legs", arXiv 2609.17172). ``asset_cfg`` lists the feet's bodies in the
-  order of ``spots``.
-  """
-  asset: Entity = env.scene[asset_cfg.name]
-  feet = asset.data.body_link_pos_w[:, asset_cfg.body_ids]
-  offset = feet - asset.data.root_link_pos_w[:, None, :]
-  quat = asset.data.root_link_quat_w[:, None, :].expand(-1, feet.shape[1], -1)
-  local = quat_apply_inverse(quat, offset)[..., :2]
-  target = torch.tensor(spots, device=env.device)
-  distance_sq = torch.sum(torch.square(local - target), dim=-1)
-  return torch.exp(-distance_sq.mean(dim=-1) / std**2)
-
-
-def feet_down(
-  env: ManagerBasedRlEnv, sensor_name: str, allowed_up: int = 1
-) -> torch.Tensor:
-  """1 while at most ``allowed_up`` feet are off the ground, else 0: a crawl.
-
-  A reward for time in the air instead was met by balancing on two feet and holding
-  the others up; the same as a cost made falling at once the best early policy.
-  """
-  sensor: ContactSensor = env.scene[sensor_name]
-  assert sensor.data.found is not None
-  up = (sensor.data.found == 0).sum(dim=-1)
-  return (up <= allowed_up).float()
-
-
-def short_steps(
-  env: ManagerBasedRlEnv, sensor_name: str, min_time: float
-) -> torch.Tensor:
-  """Flights and stances shorter than ``min_time`` s, as they end (a cost): buzzing."""
-  sensor: ContactSensor = env.scene[sensor_name]
-  data = sensor.data
-  assert data.last_air_time is not None and data.last_contact_time is not None
-  landed = sensor.compute_first_contact(dt=env.step_dt)
-  lifted = sensor.compute_first_air(dt=env.step_dt)
-  short = (landed & (data.last_air_time < min_time)).float()
-  short += (lifted & (data.last_contact_time < min_time)).float()
-  return short.sum(dim=-1)
-
-
-def feet_held_up(
-  env: ManagerBasedRlEnv, sensor_name: str, max_air_time: float
-) -> torch.Tensor:
-  """Feet in the air for longer than ``max_air_time`` s (a cost): a leg not used."""
-  sensor: ContactSensor = env.scene[sensor_name]
-  assert sensor.data.current_air_time is not None
-  return (sensor.data.current_air_time > max_air_time).float().sum(dim=-1)
-
-
 def contact_active(env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tensor:
   """1.0 where any primary of the contact sensor touches its secondary, else 0."""
   sensor: ContactSensor = env.scene[sensor_name]
@@ -203,7 +144,7 @@ def net_displacement(
 def actuator_saturation(
   env: ManagerBasedRlEnv, effort_limit: float, asset_cfg: SceneEntityCfg = _ROBOT
 ) -> torch.Tensor:
-  """Fraction of actuators at their torque limit (a metric, or a cost)."""
+  """Fraction of actuators at their torque limit."""
   asset: Entity = env.scene[asset_cfg.name]
   saturated = asset.data.actuator_force.abs() >= 0.99 * effort_limit
   return saturated.float().mean(dim=-1)

@@ -35,11 +35,8 @@ from mjlab.viewer import ViewerConfig
 
 from walking_leap import mdp
 from walking_leap.robot import (
-  API_EFFORT_LIMIT,
   EFFORT_LIMIT,
   FINGER_ROOT_BODIES,
-  FOLDED_FEET,
-  FOOT_GEOMS,
   ROOT_BODY,
   get_leap_hand_cfg,
   joint_limits,
@@ -56,18 +53,8 @@ PALM_CONTACT = "palm_ground_contact"
 DIGIT_CONTACT = "digit_ground_contact"
 
 
-def walking_leap_flat_env_cfg(
-  play: bool = False, as_built: bool = False, gait_terms: bool = False
-) -> ManagerBasedRlEnvCfg:
-  """Forward walking on flat ground. ``play=True`` gives an endless episode.
-
-  ``as_built``: the hand as it is being built (feet, IMU, LEAP's own thumb limits),
-  in the folded-thumb stance, with the torque its 350 mA current limit allows.
-  ``gait_terms`` (as-built only): rewards against the ways that hand cheats with the
-  base ones (a foot never used, buzzing steps, motors held at their limit).
-  """
-  assert as_built or not gait_terms
-  effort_limit = API_EFFORT_LIMIT if as_built else EFFORT_LIMIT
+def walking_leap_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+  """Forward walking on flat ground. ``play=True`` gives an endless episode."""
 
   ##
   # Sensors: palm-ground and per-digit ground contact (whole digit subtree, so
@@ -139,7 +126,7 @@ def walking_leap_flat_env_cfg(
       actuator_names=(".*",),
       scale=ACTION_SCALE,
       use_default_offset=True,
-      clip=joint_limits(as_built),
+      clip=joint_limits(),
     )
   }
 
@@ -230,51 +217,6 @@ def walking_leap_flat_env_cfg(
     ),
   }
 
-  if gait_terms:
-    feet = SceneEntityCfg("robot", body_names=FOOT_GEOMS, preserve_order=True)
-    rewards |= {
-      # Every foot near its place under the palm: no foot is left in the air.
-      "footprint": RewardTermCfg(
-        func=mdp.footprint,
-        weight=1.0,
-        params={"spots": FOLDED_FEET, "std": 0.03, "asset_cfg": feet},
-      ),
-      # A crawl: one foot up at a time, for 0.1 to 0.5 s, down again as long.
-      "feet_down": RewardTermCfg(
-        func=mdp.feet_down, weight=1.0, params={"sensor_name": DIGIT_CONTACT}
-      ),
-      "short_steps": RewardTermCfg(
-        func=mdp.short_steps,
-        weight=-1.0,
-        params={"sensor_name": DIGIT_CONTACT, "min_time": 0.1},
-      ),
-      "feet_held_up": RewardTermCfg(
-        func=mdp.feet_held_up,
-        weight=-1.0,
-        params={"sensor_name": DIGIT_CONTACT, "max_air_time": 0.5},
-      ),
-      "feet_slip": RewardTermCfg(
-        func=vel_mdp.feet_slip,
-        weight=-5.0,
-        params={
-          "sensor_name": DIGIT_CONTACT,
-          "command_name": "twist",
-          "asset_cfg": SceneEntityCfg(
-            "robot", site_names=FOOT_GEOMS, preserve_order=True
-          ),
-        },
-      ),
-      "saturation": RewardTermCfg(
-        func=mdp.actuator_saturation,
-        weight=-1.0,
-        params={"effort_limit": effort_limit},
-      ),
-      "joint_vel": RewardTermCfg(func=envs_mdp.joint_vel_l2, weight=-0.002),
-      # Without it the costs above make falling at once the best early policy.
-      "alive": RewardTermCfg(func=envs_mdp.is_alive, weight=1.0),
-    }
-    rewards["joint_torques"].weight = -0.5
-
   ##
   # Terminations. Only time_out is a truncation (time_out=True); the others are
   # physical failures.
@@ -303,7 +245,7 @@ def walking_leap_flat_env_cfg(
       func=mdp.contact_active, params={"sensor_name": PALM_CONTACT}
     ),
     "actuator_saturation": MetricsTermCfg(
-      func=mdp.actuator_saturation, params={"effort_limit": effort_limit}
+      func=mdp.actuator_saturation, params={"effort_limit": EFFORT_LIMIT}
     ),
     "mechanical_power": MetricsTermCfg(func=mdp.mechanical_power),
   }
@@ -311,11 +253,7 @@ def walking_leap_flat_env_cfg(
   cfg = ManagerBasedRlEnvCfg(
     scene=SceneCfg(
       terrain=TerrainEntityCfg(terrain_type="plane"),
-      entities={
-        "robot": get_leap_hand_cfg(
-          as_built=as_built, folded_thumb=as_built, effort_limit=effort_limit
-        )
-      },
+      entities={"robot": get_leap_hand_cfg()},
       sensors=(palm_contact, digit_contact),
       num_envs=1,
       env_spacing=1.0,

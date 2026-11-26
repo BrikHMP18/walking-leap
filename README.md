@@ -60,7 +60,6 @@ tests/
   test_robot.py    Model structure and physics (plain MuJoCo, CPU)
   test_as_built.py The same for the hand with its parts
   test_env.py      mjlab walking environment (GPU if available, else CPU)
-  test_env_as_built.py  The same with the as-built hand
   test_motion.py   Animations and the motion-imitation environment
 docs/
   render_media.py  Renders the README images/GIFs into docs/media/
@@ -88,8 +87,6 @@ uv run list-envs        # Walking-Leap-Flat-v0 must be listed
 | Task | Hand | What |
 | --- | --- | --- |
 | `Walking-Leap-Flat-v0` | stock | walk forward |
-| `Walking-Leap-Flat-v1` | as built, 350 mA | the same rewards |
-| `Walking-Leap-Flat-v2` | as built, 350 mA | with gait terms |
 | `Walking-Leap-Motion-Flat-v0` | as built, 350 mA | play an animation |
 | `Walking-Leap-Motion-Flat-v1` | as built, 350 mA | the same, with kicks, cables, noise, delay and random numbers |
 
@@ -141,7 +138,7 @@ uv run play Walking-Leap-Motion-Flat-v1 \
 ## Tests
 
 ```sh
-uv run pytest                              # 46 tests: 23 robot/physics, 23 clips and environments
+uv run pytest                              # 41 tests: 23 robot/physics, 18 clips and environments
 CUDA_VISIBLE_DEVICES="" uv run pytest      # CPU only (~45 s)
 uv run ruff check src tests docs && uv run ruff format --check src tests docs
 uv run python docs/render_media.py         # regenerate docs/media/
@@ -288,12 +285,14 @@ reward, over one 10 s rollout (walking) or 128 rollouts of the whole clip (anima
 | Run | Result |
 | --- | --- |
 | `Walking-Leap-Flat-v0`, 3,000 iterations (`logs/rsl_rl/walking_leap_flat/2026-11-24_20-38-51_baseline_v0`) | walks 0.50 m in 10 s without falling, tilt under 1.2°, heading off by 15°; a small-step shuffle at 2 Hz, the thumb tapping 6 times a second; 0.9 % of joint-steps above 0.181 N·m, peak 0.39 |
-| `Walking-Leap-Flat-v1`, stopped at 420 | 0.48 m, but on three fingers: the thumb never touches the ground, motors at their cap 16 % of the time. The base rewards do not stop it |
-| `Walking-Leap-Flat-v2`, first terms, stopped at 1,800 | a reward for time in the air was met by balancing on the middle finger and the thumb, 0.45 m. Term removed |
-| `Walking-Leap-Flat-v2`, second terms (at most one foot up), stopped at 430 | the index held up for good (2 % contact), 0.42 m in 10 s |
-| `Walking-Leap-Flat-v2`, as in this repository, 3,000 iterations (`logs/rsl_rl/walking_leap_flat/2026-11-24_22-03-48_as_built_crawl`) | slow real steps (0.67 Hz) on three digits, 0.027 m/s, 0.26 m in 10 s, turning 56° on the way; the index stays up 95 % of the time; motors at their cap 2.3 % of joint-steps |
+| As built, base rewards, stopped at 420 | 0.48 m, but on three fingers: the thumb never touches the ground, motors at their cap 16 % of the time. The base rewards do not stop it |
+| As built, first gait terms, stopped at 1,800 | a reward for time in the air was met by balancing on the middle finger and the thumb, 0.45 m. Term removed |
+| As built, second gait terms (at most one foot up), stopped at 430 | the index held up for good (2 % contact), 0.42 m in 10 s |
+| As built, third gait terms, 3,000 iterations (`logs/rsl_rl/walking_leap_flat/2026-11-24_22-03-48_as_built_crawl`) | slow real steps (0.67 Hz) on three digits, 0.027 m/s, 0.26 m in 10 s, turning 56° on the way; the index stays up 95 % of the time; motors at their cap 2.3 % of joint-steps |
 
-The walking runs had an earlier IMU holder (47 g instead of 58). The cover gained room
+The as-built walking tasks of these runs (`Flat-v1` and `-v2` with gait terms) were tests and are
+no longer in the repository: their results stay here. The next try imitates the scripted
+crawl instead (docs/next_training.md). The walking runs had an earlier IMU holder (47 g instead of 58). The cover gained room
 for the board's pins after the animation runs: its masses in the model are the same, its
 contact box is 0.9 mm longer. The "randomized, cables" policy replayed on it stays within
 1 point of its column below.

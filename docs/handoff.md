@@ -20,8 +20,7 @@ parts. The details live in [real_hand.md](real_hand.md) (what ran on the real ha
 - **For the next policy:** train on the hand as it is (stock fingertips, no socks yet),
   imitate the scripted crawl rather than reward walking from scratch, turn on torsional
   friction, center the motors on 2.2-3.0 N·m/rad ([next_training.md](next_training.md)).
-- **Before merging into `main`:** six files conflict, and both sides use the task ID
-  `Walking-Leap-Flat-v1` for different tasks (below).
+- **Before merging into `main`:** a few files that both sides changed (below).
 
 ## What the branch adds
 
@@ -30,25 +29,26 @@ parts. The details live in [real_hand.md](real_hand.md) (what ran on the real ha
 | The built hand | `robot.py` (`as_built=True`, `folded_thumb`, `actuator_cfg(effort_limit)`), `assets/parts/` | four TPU socks over the stock fingertips, the IMU (19 g) under its printed cover and pad with its USB plug (58 g in all), LEAP's own thumb limits (Menagerie's are shifted by one joint), the folded-thumb stance, the 350 mA cap (0.181 N·m) |
 | Animations | `clips.py`, `assets/clips/hello.npz` | a palm path plus finger gestures, every planted foot solved to stay put; `hello`: push-ups, a stretch, hip circles, a look around, a wave, finger drumming, a bow |
 | Imitation | `motion_cfg.py`, `agent_cfg.py`, `mdp.py` | mjlab's motion tracking at this hand's scale; the actor sees only encoders and the IMU (89 numbers). `-v1` adds kicks, sensor noise, up to 20 ms of delay, random grip, balance, motors and a steady cable pull |
-| Walking, built hand | `env_cfg.py`, `mdp.py` | the walking task on the built hand, with and without gait terms (not solved: README "First runs") |
-| Tests | `tests/test_as_built.py`, `test_env_as_built.py`, `test_motion.py` | 46 tests in all, passing on GPU and CPU |
+| Tests | `tests/test_as_built.py`, `test_motion.py` | 41 tests in all, passing on GPU and CPU |
 | Real hand | `docs/real_hand.md`, `docs/data/real_clips/`, `docs/media/real_*.png` | the runs, sim against real, and the exact joint targets the real hand played |
 | Next training | `docs/next_training.md` | what to change and why, each number marked measured, sim or guess |
 | Hardware | `hardware/` | the latest printable files: IMU mount v4 (cover, pad), foot sock v3 |
 | Docs | `README.md`, `PLAN.md`, `AGENTS.md` | the sections above, verified progress, one line on clips |
+
+The walking tasks this branch had for the built hand (`Flat-v1` and `-v2` with gait terms)
+were tests and are removed; their results stay in README "First runs". The built hand's
+walking comes next from imitating the scripted crawl.
 
 ## Tasks
 
 | Task ID (this branch) | What | Train | State |
 | --- | --- | --- | --- |
 | `Walking-Leap-Flat-v0` | Brik's walking task, nominal hand | as in README | unchanged |
-| `Walking-Leap-Flat-v1` | walking with the built hand, base rewards | `uv run train Walking-Leap-Flat-v1 --env.scene.num-envs 4096` | cheats (a finger in the air) |
-| `Walking-Leap-Flat-v2` | the same with gait terms | same with `-v2` | slow crawl, index up 95 % of the time |
 | `Walking-Leap-Motion-Flat-v0` | imitate `hello`, nothing random | `uv run train Walking-Leap-Motion-Flat-v0 --env.scene.num-envs 4096` | learned, within 2.3 mm (one seed) |
 | `Walking-Leap-Motion-Flat-v1` | imitate `hello`, randomized and cables | same with `-v1` (3,000 iterations, about 40 min on an RTX 4090) | learned, within 1.8 mm; the one to use |
 
 ```sh
-uv sync && uv run pytest                    # 46 tests; CUDA_VISIBLE_DEVICES="" for CPU only
+uv sync && uv run pytest                    # 41 tests; CUDA_VISIBLE_DEVICES="" for CPU only
 uv run play Walking-Leap-Motion-Flat-v1 --viewer viser \
   --motion-file src/walking_leap/assets/clips/hello.npz \
   --checkpoint-file logs/rsl_rl/walking_leap_motion/<run>/model_2999.pt
@@ -112,18 +112,16 @@ What is printed for the hand, the latest versions: [hardware/README.md](../hardw
 ## Merging into `main`
 
 `main` has moved on since this branch started (seven commits, up to the omnidirectional
-and IMU-free tasks). A trial merge conflicts in `AGENTS.md`, `PLAN.md`, `README.md`,
-`src/walking_leap/__init__.py`, `env_cfg.py` and `mdp.py`.
+and IMU-free tasks). A trial merge conflicts in four files only, all of them lists both
+sides added to:
 
-- **Task IDs collide:** `main`'s `Walking-Leap-Flat-v1` is the omnidirectional task; this
-  branch's is the built hand's walk. `main`'s AGENTS.md now allows a variant segment, so
-  the built hand's tasks could become, say, `Walking-Leap-Flat-AsBuilt-v1` and `-v2`.
-  Brik's call.
-- `env_cfg.py` and `mdp.py`: both sides add terms (this branch: the built hand and gait
-  terms; `main`: command resampling and the fingertip-sliding penalty, which is close to
-  the torsion finding above).
-- Where hardware files and real-hand data should live in the repository is Brik's call
-  too; for now they are in `hardware/` and `docs/data/`.
+- `src/walking_leap/__init__.py`: keep both sets of tasks (`main`'s `Flat-v1` and
+  `Flat-NoImu-v1`, this branch's `Motion-Flat-v0` and `-v1`). No task ID is shared any
+  more: this branch's test walking tasks are gone.
+- `README.md`, `PLAN.md`, `AGENTS.md`: both sides' sections and lines.
+- `env_cfg.py` and `mdp.py` merge on their own. `main`'s fingertip-sliding penalty is close
+  to the torsion finding above.
+- The printed parts live in `hardware/`, the real hand's data in `docs/data/`.
 
 ## Licences
 
