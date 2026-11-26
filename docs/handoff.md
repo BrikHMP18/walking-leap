@@ -32,7 +32,7 @@ parts. The details live in [real_hand.md](real_hand.md) (what ran on the real ha
 | Tests | `tests/test_as_built.py`, `test_motion.py`, `test_real_runs.py` | 53 tests in all on `main` with this, passing on GPU and CPU |
 | Real hand | `docs/real_hand.md`, `docs/data/real_clips/`, `docs/data/real_runs/`, `docs/media/real_*.png` | the runs, sim against real, and the exact joint targets the real hand played |
 | Next training | `docs/next_training.md` | what to change and why, each number marked measured, sim or guess |
-| Hardware | `hardware/` | the latest printable files: IMU mount v4 (cover, pad), foot sock v3 |
+| Hardware | `hardware/` | the latest printable files: IMU mount v4 (cover, pad), foot sock v4 |
 | Docs | `README.md`, `PLAN.md`, `AGENTS.md` | the sections above, verified progress, one line on clips |
 
 The walking tasks this branch had for the built hand (`Flat-v1` and `-v2` with gait terms)
@@ -112,7 +112,7 @@ What is printed for the hand, the latest versions: [hardware/README.md](../hardw
 | Part | Version | State | In the simulator |
 | --- | --- | --- | --- |
 | IMU mount: cover and pad | v4 | v3 printed and fits; v4 adds room for the 5-pin header soldered on the IMU | yes, v4 (`assets/parts/imu_*.stl`) |
-| Foot sock, ×4 | v3 | v2 printed, a bit too tight; v3 a little looser, not printed yet. The real hand has stock fingertips for now | yes (`assets/parts/foot_sock_*.obj`, the shape on the finger, the same for v2 and v3) |
+| Foot sock, ×4 | v4 | v2 printed, a bit too tight; v3 went too low; v4 is a short cap over the last 16 mm, not printed yet. The real hand has stock fingertips for now | the full v2/v3 sock (`assets/parts/foot_sock_*.obj`): the same end as v4, 1.6 g heavier |
 
 ## Merging into `main`
 
