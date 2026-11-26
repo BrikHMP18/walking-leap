@@ -159,6 +159,12 @@ The trainings below that are checked come from a branch, not from this milestone
       (`clips.replay`, `test_crawl_file_is_up_to_date`); train 2 seeds each,
       3000 iterations, nominal first, then randomized; then the real hand
       (shadow, then driving)
+  - [x] Nominal, 2 seeds each, 3000 iterations: Rorqual jobs 27676904 (IMU) and
+        27676905 (no IMU); in the training logs the palm stays 5.8–6.3 mm and
+        3.0–3.3° from the clip in all four runs (README "Checkpoints", on Hugging Face)
+  - [ ] Evaluated outside training (rollouts watched, tests of docs/next_training.md)
+  - [ ] Randomized
+  - [ ] Real hand: shadow, then driving
 - [ ] Steerable imitation: turning crawl clips (and one where the thumb steps,
       as in `taps`), one policy for all of them, the keyboard picking the next cycle
 - [ ] Keyboard teleoperation of the velocity command in `play`

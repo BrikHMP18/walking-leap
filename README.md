@@ -33,12 +33,19 @@ the real hand and what to train next).
   own, does push-ups, lifts one finger at a time and crawls forward 12+ cm in six
   scripted cycles; the simulator's gravity direction matches the real IMU's within
   about 1.6° on average ([docs/real_hand.md](docs/real_hand.md)).
+- **Imitating the real crawl** on the real hand's model (IMU, stock tips, 350 mA,
+  measured stiffness, torsional friction), nominal, with and without the IMU in the
+  actor (`Walking-Leap-Motion-Crawl-Flat-v0`, `-NoImu-v0`): trained on Rorqual
+  (Slurm jobs 27676904 and 27676905, 3000 PPO iterations, seeds 42 and 43 each). In
+  the training logs (mean of the last 100 iterations) all four runs keep the palm
+  5.8–6.3 mm and 3.0–3.3° from the clip, episodes last 498.7–500 of 500 steps and
+  the palm never touches the ground. Not yet evaluated outside training, randomized
+  or run on the real hand; checkpoints and ONNX files in "Checkpoints".
 - **Implemented, not yet trained:** omnidirectional commands with a
   fingertip-sliding penalty (`Walking-Leap-Flat-v1`, `-NoImu-v1`) on the nominal
-  model; and on the real hand's model (IMU, stock tips, 350 mA, measured stiffness,
-  torsional friction), each with and without the IMU in the actor: walking from
-  rewards only (`Walking-Leap-Flat-v3`, `-NoImu-v3`) and imitating the real crawl
-  (`Walking-Leap-Motion-Crawl-Flat-v0`, `-NoImu-v0`).
+  model, and walking from rewards only on the real hand's model, with and without
+  the IMU (`Walking-Leap-Flat-v3`, `-NoImu-v3`; queued on Rorqual, jobs 27680032
+  and 27680033).
 
 What the next training batch should change, from all of it:
 [docs/next_training.md](docs/next_training.md). See [PLAN.md](PLAN.md).
@@ -185,6 +192,30 @@ results.
 | --- | --- | --- | --- | --- |
 | `2026-11-25_11-43-22` | `Walking-Leap-Flat-v0` | 42 | 3000 | 0.049 m/s for 0.05 commanded, no falls |
 | `2026-11-25_11-41-44` | `Walking-Leap-Flat-v0` | 43 | 3000 | 0.049 m/s for 0.05 commanded, no falls |
+| [`2026-11-26_01-55-17_Walking-Leap-Motion-Crawl-Flat-v0_s42`](https://huggingface.co/Autobrik/walking-leap/tree/main/runs/2026-11-26_01-55-17_Walking-Leap-Motion-Crawl-Flat-v0_s42) | `Walking-Leap-Motion-Crawl-Flat-v0` | 42 | 3000 | palm 6.3 mm and 3.2° from the clip, joints 0.13 rad |
+| [`2026-11-26_01-55-17_Walking-Leap-Motion-Crawl-Flat-v0_s43`](https://huggingface.co/Autobrik/walking-leap/tree/main/runs/2026-11-26_01-55-17_Walking-Leap-Motion-Crawl-Flat-v0_s43) | `Walking-Leap-Motion-Crawl-Flat-v0` | 43 | 3000 | palm 5.8 mm and 3.0° from the clip, joints 0.09 rad |
+| [`2026-11-26_03-27-52_Walking-Leap-Motion-Crawl-Flat-NoImu-v0_s42`](https://huggingface.co/Autobrik/walking-leap/tree/main/runs/2026-11-26_03-27-52_Walking-Leap-Motion-Crawl-Flat-NoImu-v0_s42) | `Walking-Leap-Motion-Crawl-Flat-NoImu-v0` | 42 | 3000 | palm 6.2 mm and 3.1° from the clip, joints 0.10 rad |
+| [`2026-11-26_05-12-31_Walking-Leap-Motion-Crawl-Flat-NoImu-v0_s43`](https://huggingface.co/Autobrik/walking-leap/tree/main/runs/2026-11-26_05-12-31_Walking-Leap-Motion-Crawl-Flat-NoImu-v0_s43) | `Walking-Leap-Motion-Crawl-Flat-NoImu-v0` | 43 | 3000 | palm 6.2 mm and 3.3° from the clip, joints 0.10 rad |
+
+The crawl results come from the training logs (mean of the last 100 iterations):
+mjlab's tracking errors of the palm (`error_anchor_pos`, `error_anchor_rot`) and of
+the 16 joints (`error_joint_pos`, the norm over the joints). They are not an
+evaluation: watch the runs (below) and test them as in docs/next_training.md before
+any use on the hand.
+
+**For the real hand** the four crawl runs are the candidates. Each run folder holds,
+besides the checkpoints, the final policy exported as ONNX (`<run>.onnx`). Its
+inputs are `obs` (the actor's observations: 89 with the IMU, 83 without, in the
+order of the task's `params/env.yaml`) and `time_step` (the clip's frame, at 50 Hz);
+its outputs are `actions` (16 joint targets, before the task's action scale and
+offset) and the reference motion at that frame.
+
+| Policy | Final checkpoint | ONNX |
+| --- | --- | --- |
+| crawl, with IMU, seed 42 | [model_2999.pt](https://huggingface.co/Autobrik/walking-leap/resolve/main/runs/2026-11-26_01-55-17_Walking-Leap-Motion-Crawl-Flat-v0_s42/model_2999.pt) | [.onnx](https://huggingface.co/Autobrik/walking-leap/resolve/main/runs/2026-11-26_01-55-17_Walking-Leap-Motion-Crawl-Flat-v0_s42/2026-11-26_01-55-17_Walking-Leap-Motion-Crawl-Flat-v0_s42.onnx) |
+| crawl, with IMU, seed 43 | [model_2999.pt](https://huggingface.co/Autobrik/walking-leap/resolve/main/runs/2026-11-26_01-55-17_Walking-Leap-Motion-Crawl-Flat-v0_s43/model_2999.pt) | [.onnx](https://huggingface.co/Autobrik/walking-leap/resolve/main/runs/2026-11-26_01-55-17_Walking-Leap-Motion-Crawl-Flat-v0_s43/2026-11-26_01-55-17_Walking-Leap-Motion-Crawl-Flat-v0_s43.onnx) |
+| crawl, no IMU, seed 42 | [model_2999.pt](https://huggingface.co/Autobrik/walking-leap/resolve/main/runs/2026-11-26_03-27-52_Walking-Leap-Motion-Crawl-Flat-NoImu-v0_s42/model_2999.pt) | [.onnx](https://huggingface.co/Autobrik/walking-leap/resolve/main/runs/2026-11-26_03-27-52_Walking-Leap-Motion-Crawl-Flat-NoImu-v0_s42/2026-11-26_03-27-52_Walking-Leap-Motion-Crawl-Flat-NoImu-v0_s42.onnx) |
+| crawl, no IMU, seed 43 | [model_2999.pt](https://huggingface.co/Autobrik/walking-leap/resolve/main/runs/2026-11-26_05-12-31_Walking-Leap-Motion-Crawl-Flat-NoImu-v0_s43/model_2999.pt) | [.onnx](https://huggingface.co/Autobrik/walking-leap/resolve/main/runs/2026-11-26_05-12-31_Walking-Leap-Motion-Crawl-Flat-NoImu-v0_s43/2026-11-26_05-12-31_Walking-Leap-Motion-Crawl-Flat-NoImu-v0_s43.onnx) |
 
 Download one run and watch it in the MuJoCo viewer (after `uv sync`; no
 Hugging Face account is needed for the public repository):
@@ -194,6 +225,16 @@ uvx --from huggingface_hub hf download Autobrik/walking-leap \
   --include "runs/2026-11-25_11-43-22/*" --local-dir outputs/hf
 uv run play Walking-Leap-Flat-v0 --viewer native \
   --checkpoint-file outputs/hf/runs/2026-11-25_11-43-22/model_2999.pt
+```
+
+The crawl runs need the clip too (use `-NoImu-v0` for the runs without IMU):
+
+```sh
+uvx --from huggingface_hub hf download Autobrik/walking-leap \
+  --include "runs/*Crawl*" --local-dir outputs/hf
+uv run play Walking-Leap-Motion-Crawl-Flat-v0 --viewer native \
+  --motion-file src/walking_leap/assets/clips/crawl.npz \
+  --checkpoint-file outputs/hf/runs/2026-11-26_01-55-17_Walking-Leap-Motion-Crawl-Flat-v0_s42/model_2999.pt
 ```
 
 `outputs/` is git-ignored. Play a checkpoint with the task it was trained on
