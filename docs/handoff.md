@@ -29,10 +29,10 @@ parts. The details live in [real_hand.md](real_hand.md) (what ran on the real ha
 | The built hand | `robot.py` (`as_built=True`, `folded_thumb`, `actuator_cfg(effort_limit)`), `assets/parts/` | four TPU socks over the stock fingertips, the IMU (19 g) under its printed cover and pad with its USB plug (58 g in all), LEAP's own thumb limits (Menagerie's are shifted by one joint), the folded-thumb stance, the 350 mA cap (0.181 N·m) |
 | Animations | `clips.py`, `assets/clips/hello.npz` | a palm path plus finger gestures, every planted foot solved to stay put; `hello`: push-ups, a stretch, hip circles, a look around, a wave, finger drumming, a bow |
 | Imitation | `motion_cfg.py`, `agent_cfg.py`, `mdp.py` | mjlab's motion tracking at this hand's scale; the actor sees only encoders and the IMU (89 numbers). `-v1` adds kicks, sensor noise, up to 20 ms of delay, random grip, balance, motors and a steady cable pull |
-| Tests | `tests/test_as_built.py`, `test_motion.py` | 41 tests in all, passing on GPU and CPU |
-| Real hand | `docs/real_hand.md`, `docs/data/real_clips/`, `docs/media/real_*.png` | the runs, sim against real, and the exact joint targets the real hand played |
+| Tests | `tests/test_as_built.py`, `test_motion.py`, `test_real_runs.py` | 53 tests in all on `main` with this, passing on GPU and CPU |
+| Real hand | `docs/real_hand.md`, `docs/data/real_clips/`, `docs/data/real_runs/`, `docs/media/real_*.png` | the runs, sim against real, and the exact joint targets the real hand played |
 | Next training | `docs/next_training.md` | what to change and why, each number marked measured, sim or guess |
-| Hardware | `hardware/` | the latest printable files: IMU mount v4 (cover, pad), foot sock v3 |
+| Hardware | `hardware/` | the latest printable files: IMU mount v4 (cover, pad), foot sock v4 |
 | Docs | `README.md`, `PLAN.md`, `AGENTS.md` | the sections above, verified progress, one line on clips |
 
 The walking tasks this branch had for the built hand (`Flat-v1` and `-v2` with gait terms)
@@ -48,7 +48,7 @@ walking comes next from imitating the scripted crawl.
 | `Walking-Leap-Motion-Flat-v1` | imitate `hello`, randomized and cables | same with `-v1` (3,000 iterations, about 40 min on an RTX 4090) | learned, within 1.8 mm; the one to use |
 
 ```sh
-uv sync && uv run pytest                    # 41 tests; CUDA_VISIBLE_DEVICES="" for CPU only
+uv sync && uv run pytest                    # 53 tests; CUDA_VISIBLE_DEVICES="" for CPU only
 uv run play Walking-Leap-Motion-Flat-v1 --viewer viser \
   --motion-file src/walking_leap/assets/clips/hello.npz \
   --checkpoint-file logs/rsl_rl/walking_leap_motion/<run>/model_2999.pt
@@ -87,6 +87,11 @@ needing the one before:
 ## The real hand
 
 - What ran and what it showed: [real_hand.md](real_hand.md). The joint targets of every
+  What the hand recorded in six runs (stand up, a script, lie down): `docs/data/real_runs/*.npz`,
+  motors at 100 Hz (`q`, `current` in mA), the IMU at 100 Hz (`gravity`, `gyro`, palm axes), every
+  target sent at 50 Hz (`sent`) and which clip played (`clip`); `tests/test_real_runs.py` replays
+  one in the simulator and checks the palm's tilt stays within 3° of the real IMU on average
+  (1.5° now). Run it after any change to the model's contacts or motors.
   script the hand played: `docs/data/real_clips/*.npz`, each with `q` (frames × 16, 50 Hz,
   the repo's joint order, rad), `grav` (what the simulation's IMU read for them, in the
   palm's axes) and `meta` (JSON: start and end pose, how it was made).
@@ -107,7 +112,7 @@ What is printed for the hand, the latest versions: [hardware/README.md](../hardw
 | Part | Version | State | In the simulator |
 | --- | --- | --- | --- |
 | IMU mount: cover and pad | v4 | v3 printed and fits; v4 adds room for the 5-pin header soldered on the IMU | yes, v4 (`assets/parts/imu_*.stl`) |
-| Foot sock, ×4 | v3 | v2 printed, a bit too tight; v3 a little looser, not printed yet. The real hand has stock fingertips for now | yes (`assets/parts/foot_sock_*.obj`, the shape on the finger, the same for v2 and v3) |
+| Foot sock, ×4 | v4 | v2 printed, a bit too tight; v3 went too low; v4 is a short cap over the last 16 mm, not printed yet. The real hand has stock fingertips for now | the full v2/v3 sock (`assets/parts/foot_sock_*.obj`): the same end as v4, 1.6 g heavier |
 
 ## Merging into `main`
 

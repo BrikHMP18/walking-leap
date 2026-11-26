@@ -145,6 +145,13 @@ IMU measures in the palm's frame.
 See [next_training.md](next_training.md): what the model should change, the torsional
 friction test, the crawl as the clip to imitate, and what to measure next.
 
+## The recordings
+
+Six of the runs above, as recorded: `docs/data/real_runs/` (motors and IMU at 100 Hz, every
+target sent at 50 Hz, which clip played). `tests/test_real_runs.py` replays the push-ups run in
+the simulator with the stiffness and grip that fit best (2.6 N·m/rad, 0.8) and fails if the
+palm's tilt drifts more than 3° from the real IMU on average (1.5° now).
+
 ## How it was run
 
 A 50 Hz loop on the computer the hand is plugged into, in plain Python: it reads the

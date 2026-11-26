@@ -23,17 +23,20 @@ lid's M6 holes: a **cover** over the board and a thin **pad** under it.
   walls stand there).
 - Licence: MIT (it only bolts to the hand, nothing is taken from LEAP's CAD).
 
-## Foot sock (`foot_sock/`, v3)
+## Foot sock (`foot_sock/`, v4)
 
-A thin TPU skin over a stock LEAP fingertip, keeping its shape (flat pad, so the hand can
-still grasp). Four of the same.
+A short TPU cap over the last 16 mm of a stock LEAP fingertip, keeping its shape (flat pad,
+rounded end, so the hand can still grasp). Four of the same.
 
-![Foot sock v3](foot_sock/wl-foot-sock-v3.png)
+![Foot sock v4](foot_sock/wl-foot-sock-v4.png)
 
-- 26.5 × 23.5 mm on the tip, 2.2 mm longer than it.
-- **v3** = v2 (printed, a bit too tight) with half the squeeze (1 % instead of 2 %). Not
-  printed yet.
-- **Print:** TPU 95A, opening down, no supports, 0.16 mm layers, 3 walls, 100 % infill.
-- In the simulator: `as_built=True` puts them on (about 4.8 g each, friction randomized).
+- 18.2 mm tall, 26.2 wide outside, its opening 23.6 × 20.3; 1.5 % squeeze on the tip.
+- **v4** = the end of v3 only: v2 (a full skin, printed) was a bit too tight, v3 (looser) went
+  too low on the finger. Not printed yet.
+- **Print:** TPU 95A from the external spool, dry, opening down, no supports, 0.16 mm layers,
+  3 walls, 100 % infill. One first; the other three once it fits and stays on (push it
+  sideways, drag it on the floor by hand).
+- In the simulator: `as_built=True` puts on the full v2/v3 sock (4.8 g each, friction
+  randomized). Its end, where it stands, is the same as v4's; v4 weighs about 3.2 g.
   The real hand has run with stock fingertips so far.
 - Licence: CC BY-SA 4.0 (it follows LEAP's fingertip): `foot_sock/LICENSE`.
