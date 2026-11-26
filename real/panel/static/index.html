@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Walking Leap · control</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+    {"imports": {"three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                 "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+  </script>
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="dot" id="dot"></span>Walking Leap</div>
+    <div class="chips">
+      <span class="chip" id="chip-mode">…</span>
+      <span class="chip" id="chip-where">…</span>
+      <span class="chip accent" id="chip-clip" hidden></span>
+    </div>
+    <div class="actions">
+      <button id="btn-connect" class="btn primary">Connect</button>
+      <button id="btn-stand" class="btn">Stand up</button>
+      <button id="btn-lie" class="btn">Lie down</button>
+      <button id="btn-end" class="btn quiet">Disconnect</button>
+      <button id="btn-stop" class="btn stop">STOP <kbd>Esc</kbd></button>
+    </div>
+  </header>
+
+  <div class="confirm" id="confirm" hidden>
+    <span id="confirm-text"></span>
+    <button class="btn primary" id="confirm-yes">Yes</button>
+    <button class="btn quiet" id="confirm-no">Cancel</button>
+  </div>
+
+  <main>
+    <section class="card view">
+      <div class="card-title">Live view
+        <span class="legend"><i class="sw real"></i>measured <i class="sw ghost"></i>supposed (the clip)</span>
+      </div>
+      <div id="three"></div>
+      <div class="hud">
+        <div><b id="hud-tilt">–</b><span>tilt</span></div>
+        <div><b id="hud-off">–</b><span>IMU vs plan</span></div>
+        <div><b id="hud-pol">–</b><span>policy vs clip</span></div>
+        <div><b id="hud-late">–</b><span>loop late</span></div>
+        <div><b id="hud-temp">–</b><span>motors</span></div>
+      </div>
+      <div class="progress"><div id="prog"></div></div>
+    </section>
+
+    <aside class="side">
+      <section class="card">
+        <div class="card-title">Policy</div>
+        <select id="policy"></select>
+        <div class="seg" id="seg-live">
+          <button data-live="0" class="on">Shadow</button>
+          <button data-live="1">Live</button>
+        </div>
+        <div class="hint" id="policy-hint"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-title">Move <span class="sub">W A S D · Q E</span></div>
+        <div class="pad">
+          <button class="key" data-key="q"><b>Q</b><small>turn left</small><i></i></button>
+          <button class="key" data-key="w"><b>W</b><small>forward</small><i></i></button>
+          <button class="key" data-key="e"><b>E</b><small>turn right</small><i></i></button>
+          <button class="key" data-key="a"><b>A</b><small>left</small><i></i></button>
+          <button class="key" data-key="s"><b>S</b><small>back</small><i></i></button>
+          <button class="key" data-key="d"><b>D</b><small>right</small><i></i></button>
+        </div>
+        <div class="queue"><span class="sub">next</span><span id="queue">–</span>
+          <button class="mini" id="btn-clear">clear</button></div>
+      </section>
+
+      <section class="card">
+        <div class="card-title">Emotes</div>
+        <div class="emotes" id="emotes"></div>
+      </section>
+    </aside>
+
+    <div class="row">
+      <section class="card map">
+        <div class="card-title">Supposed position <span class="sub">from the plans</span>
+          <button class="mini" id="btn-reset-map">reset</button></div>
+        <canvas id="map"></canvas>
+      </section>
+      <section class="card motors">
+        <div class="card-title">Motors <span class="sub">current, cap 350 mA</span></div>
+        <div id="bars"></div>
+      </section>
+      <section class="card log">
+        <div class="card-title">Log</div>
+        <div id="log"></div>
+      </section>
+    </div>
+  </main>
+  <div id="toast"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

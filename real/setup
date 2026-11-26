@@ -1,0 +1,18 @@
+#!/bin/bash
+# real/setup: the loop's own small Python, real/.venv, with what requirements.txt lists (numpy,
+# pyyaml, pyserial, dynamixel-sdk). Once per PC, and again when requirements.txt changes.
+# Uses uv if there is one, else python3 -m venv. No torch, no GPU: the repo's own env
+# (uv sync) is for training and the tests, this one only drives the hand.
+set -euo pipefail
+here="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+uv="$(command -v uv || true)"
+if [ -z "$uv" ] && [ -x "$HOME/.local/bin/uv" ]; then uv="$HOME/.local/bin/uv"; fi
+if [ -n "$uv" ]; then
+  "$uv" venv --allow-existing --python 3.12 "$here/.venv"
+  "$uv" pip install --python "$here/.venv/bin/python" -r "$here/requirements.txt"
+else
+  python3 -m venv "$here/.venv"
+  "$here/.venv/bin/pip" install -r "$here/requirements.txt"
+fi
+env -u PYTHONPATH PYTHONNOUSERSITE=1 "$here/.venv/bin/python" -c \
+  "import numpy, yaml, serial, dynamixel_sdk; print('real/.venv ready, numpy', numpy.__version__)"

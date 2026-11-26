@@ -1,11 +1,15 @@
 """A trained animation policy -> one .npz that the real loop (real/wl.py) runs in plain numpy.
 
   uv run python real/export_policy.py CHECKPOINT --motion CLIP_FILE --clip NAME --onnx RUN.onnx
+  uv run python real/export_policy.py CHECKPOINT --tracker --clips NAME... --onnx RUN.onnx
 
 CHECKPOINT  an RSL-RL ``model_<iteration>.pt`` of a Walking-Leap-Motion-* task.
 --motion    the clip file the task trained on (its ``--motion-file``, or the task's own in
             src/walking_leap/assets/clips/). The policy keeps that reference.
 --clip      the clip of docs/data/real_clips/ it plays along on the hand: same frames, 50 Hz.
+--tracker   a tracker of several clips (trained on a library of them): it keeps no reference
+            and follows whichever of ``--clips`` the loop plays (names in real/clips/ or
+            docs/data/real_clips/, written from the clips it trained on).
 --onnx      the run's ONNX, to check the numpy copy against it (do it).
 --out       default outputs/real/policies/<checkpoint's folder>.npz
 
@@ -120,6 +124,8 @@ def main() -> int:
   ap.add_argument("checkpoint")
   ap.add_argument("--motion", help="motion policies: the clip file it trained on")
   ap.add_argument("--clip", help="motion policies: the loop's clip it plays along")
+  ap.add_argument("--tracker", action="store_true", help="a tracker of several clips")
+  ap.add_argument("--clips", nargs="+", help="--tracker: the clips it follows")
   ap.add_argument("--onnx")
   ap.add_argument("--out")
   a = ap.parse_args()
@@ -130,8 +136,8 @@ def main() -> int:
   saved = torch.load(a.checkpoint, map_location="cpu", weights_only=False)
   if "student_state_dict" in saved:
     return export_velocity(saved["student_state_dict"], out)
-  if not (a.motion and a.clip):
-    ap.error("a motion policy needs --motion and --clip")
+  if not (a.tracker and a.clips) and not (a.motion and a.clip):
+    ap.error("a motion policy needs --motion and --clip (a tracker: --tracker --clips)")
   d = saved["actor_state_dict"]
   layers = sorted(
     int(m.group(1)) for k in d if (m := re.fullmatch(r"mlp\.(\d+)\.weight", k))
@@ -142,10 +148,20 @@ def main() -> int:
   stance = [
     next(v for k, v in robot.FOLDED_JOINT_POS.items() if re.fullmatch(k, n)) for n in J
   ]
-  m = np.load(a.motion)
-  ref_q, ref_dq = m["joint_pos"].astype(float), m["joint_vel"].astype(float)
-  ref_g = gravity_in_palm(m["body_quat_w"][:, 0].astype(float))  # body 0: the palm
-  clip = wlc.Clip(a.clip)
+  if a.tracker:
+    assert a.clips and not (a.motion or a.clip), "--tracker takes --clips only"
+    for name in a.clips:
+      wlc.Clip(name)  # each one must exist
+    ref = {}
+  else:
+    assert a.motion and a.clip, "--motion and --clip (or --tracker --clips)"
+    m = np.load(a.motion)
+    ref_q, ref_dq = m["joint_pos"].astype(float), m["joint_vel"].astype(float)
+    ref_g = gravity_in_palm(m["body_quat_w"][:, 0].astype(float))  # body 0: the palm
+    clip = wlc.Clip(a.clip)
+    ref = dict(
+      clip=clip.name, clips=[clip.name], ref_q=ref_q, ref_dq=ref_dq, ref_g=ref_g
+    )
 
   def save(eps: float) -> None:
     w = {}
@@ -160,10 +176,7 @@ def main() -> int:
       scale=ACTION_SCALE,
       lo=[limits[n][0] for n in J],
       hi=[limits[n][1] for n in J],
-      clip=clip.name,
-      ref_q=ref_q,
-      ref_dq=ref_dq,
-      ref_g=ref_g,
+      **(ref or dict(clips=a.clips)),
       **w,
     )
 
@@ -196,6 +209,11 @@ def main() -> int:
     print("not checked against the ONNX (--onnx): normalizer eps 1e-2 assumed")
 
   P = MotionPolicy(out)
+  if a.tracker:
+    print(
+      f"{out}: {P.mean.size} inputs ({'with' if P.imu else 'no'} IMU), tracks {', '.join(a.clips)}"
+    )
+    return 0
   n = min(len(ref_q), len(clip.q))
   dq_off = np.abs(ref_q[:n] - clip.q[:n]).max(1)
   g_off = np.degrees(np.arccos(np.clip((ref_g[:n] * clip.grav[:n]).sum(1), -1, 1)))

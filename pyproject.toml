@@ -36,6 +36,8 @@ constraint-dependencies = ["wandb<0.29"]
 [tool.ruff]
 indent-width = 2
 src = ["src"]
+# CMU's LEAP_Hand_API, kept byte for byte (real/leap_hand/third_party/README.md).
+extend-exclude = ["real/leap_hand/third_party"]
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I", "B"]
