@@ -28,6 +28,8 @@ from walking_leap.lying_cfg import (
   walking_leap_lying_track_env_cfg,
   walking_leap_lying_v1_env_cfg,
   walking_leap_lying_v2_env_cfg,
+  walking_leap_lying_v3_env_cfg,
+  walking_leap_lying_v3_ppo_runner_cfg,
 )
 from walking_leap.motion_cfg import (
   walking_leap_clock_student_env_cfg,
@@ -353,6 +355,14 @@ for _task, _low in (("Lying-Flat-v1", False), ("Lying-Low-Flat-v2", True)):
     env_cfg=walking_leap_lying_v2_env_cfg(low=_low),
     play_env_cfg=walking_leap_lying_v2_env_cfg(play=True, low=_low),
     rl_cfg=walking_leap_lying_ppo_runner_cfg(),
+  )
+
+for _task, _low in (("Lying-Flat-v2", False), ("Lying-Low-Flat-v3", True)):
+  register_mjlab_task(
+    task_id=f"Walking-Leap-{_task}",
+    env_cfg=walking_leap_lying_v3_env_cfg(low=_low),
+    play_env_cfg=walking_leap_lying_v3_env_cfg(play=True, low=_low),
+    rl_cfg=walking_leap_lying_v3_ppo_runner_cfg(),
   )
 
 # A tracker of the deep crawls (forward, back, turns), lying: the safe one.

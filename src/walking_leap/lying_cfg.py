@@ -386,6 +386,35 @@ def walking_leap_lying_v2_env_cfg(
   return cfg
 
 
+# Lying-Flat-v2 and Low-v3: v1/Low-v2 at iteration 200 still pinned a motor on the twin,
+# and their held_far stayed at 0 in training (the exploration noise). So a cost on the
+# setpoints far from their joints now, and half the initial exploration noise
+# (``walking_leap_lying_v3_ppo_runner_cfg``).
+FAR_SPAN = 0.3  # rad beyond FAR_ERROR: the cost's full value
+FAR_NOW_WEIGHT = -3.0
+
+
+def walking_leap_lying_v3_env_cfg(
+  play: bool = False, low: bool = True
+) -> ManagerBasedRlEnvCfg:
+  """``Walking-Leap-Lying-Flat-v2`` (``low=False``) and ``-Low-Flat-v3``: v1/Low-v2 with
+  ``far_setpoints``."""
+  cfg = walking_leap_lying_v2_env_cfg(play=play, low=low)
+  cfg.rewards["far_now"] = RewardTermCfg(
+    func=lm.far_setpoints,
+    weight=FAR_NOW_WEIGHT,
+    params={"error": FAR_ERROR, "span": FAR_SPAN},
+  )
+  return cfg
+
+
+def walking_leap_lying_v3_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+  """The lying learner with half the initial exploration noise (std 0.5)."""
+  cfg = walking_leap_lying_ppo_runner_cfg()
+  cfg.actor.distribution_cfg = {**cfg.actor.distribution_cfg, "init_std": 0.5}
+  return cfg
+
+
 def walking_leap_lying_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
   """Flat-v3's learner (the student's network, so the export reads it), its own
   experiment folder."""
