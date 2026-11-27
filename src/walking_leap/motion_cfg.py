@@ -827,3 +827,13 @@ def walking_leap_velocity_v6_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg
     func=mdp.gait_clock, params={"command_name": "motion"}
   )
   return cfg
+
+
+def walking_leap_clock_student_v4_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+  """Student-v3 with moderate pushes (0.25 m/s per axis), for a student of Gait-v4 (the
+  curriculum's second step: falls under 0.5 m/s kicks 3 % against Gait-v3's 16 %) and
+  Getup: Student-v3 fell from 41 % of 0.5 m/s kicks (it got up from all)."""
+  cfg = walking_leap_clock_student_env_cfg(play=play)
+  if "push" in cfg.events:
+    cfg.events["push"].params["velocity_range"] = MODERATE_PUSH_RANGE
+  return cfg

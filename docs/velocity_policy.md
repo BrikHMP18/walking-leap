@@ -145,3 +145,29 @@ last velocity checkpoint (v3 model_2800) taught by imitation (the command is the
 planned velocity, the rewards are the clip's: following the palm's path makes it
 translate as the clip does), and Gait-v3, a safe fallback (the smooth clip tracked with
 Gait-v1's light pushes, from Gait-v1) for the panel's gait_forward emote.
+
+### The night of 2026-11-27: a curriculum, then a gait clock
+
+`scripts/eval_keys.py` (each key held 8 s after 2 s standing, 8 hands, nominal hand) is
+the panel's use; `eval_gait.py` (the clip's command, three cycles) and
+`eval_survival.py` as before.
+
+| Policy | Forward, key held (cmd 27.7 mm/s) | Back / left / right (cmd -19.6 / 14.7 / -7.8) | Turns (cmd 18.5 deg/s) | Gets up | 0.5/0.75/1.0 m/s kicks: fell, still down |
+| --- | --- | --- | --- | --- | --- |
+| Velocity-v5 (clip rewards, no clock), model_1999 | 5.7 | -1.0 / 0.5 / -1.7 | +1.2 / -1.6 | 100 % | 38/62/88 %, 3/25/28 % |
+| Student-v2 (of Gait-v3, no clock) | 4.0 | -1.2 / 0.8 / -1.2 | +0.6 / -0.6 | - | - |
+| **Student-v3 (of Gait-v3, gait clock)** | **32.2** | -5.7 / 3.5 / -3.6 | +2.6 / -3.3 | **100 %** (0.7 s) | 41/59/78 %, **0/16/28 %** |
+| a hand holding its stance | 0.3 | - | - | 0 % | 22/69/72 %, 22/69/72 % |
+
+Gait-v3 (the smooth clip, Gait-v1's light pushes, from Gait-v1): forward 93 of 90 mm in
+three cycles, back -31, turns +14/-22 deg (as its clip); kicks fell 16/41/62 %. Gait-v4
+(0.25 m/s pushes, from Gait-v3): forward 57, kicks 3/34/62 %. Both are exported as
+trackers of the six `real/clips/gait_*` clips (`brik_gait_v3`, `brik_gait_v4`).
+
+Without the clip a student cannot tell which digit's turn it is: the fast teacher alone
+(Student-v2) changed nothing. With the gait clock (the clip's phase in training; on the
+hand the numpy policy's own clock, 1.04 s cycles while a key is held) the student walks
+forward at the commanded speed. The exported numpy policy, its clock running, drives the
+simulated hand forward at 33.2 mm/s. Back, sideways and turning stay at about the
+clip's own (weak) reach; Velocity-v6 (PPO on the clip's rewards with the clock, from
+Student-v3) and Student-v4 (the clock student of Gait-v4 under moderate pushes) run.
