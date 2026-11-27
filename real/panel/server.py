@@ -56,6 +56,26 @@ MOVES = {  # key: clip (real/clips/)
   "q": "turn_left",
   "e": "turn_right",
 }
+# The same keys with a policy that tracks the fast gait clips (scripts/gait_real_clip.py:
+# three smooth cycles of gait.py's crawl, stand to stand, about 9.5 s): the key plays
+# that clip, which the policy drives, instead of the scripted step.
+GAIT_MOVES = {
+  "w": "gait_forward",
+  "s": "gait_back",
+  "a": "gait_left",
+  "d": "gait_right",
+  "q": "gait_turn_left",
+  "e": "gait_turn_right",
+}
+
+
+def move_clip(key, policy):
+  """The clip a move key plays: the fast gait clip when ``policy`` tracks it, else the
+  scripted step."""
+  gait = GAIT_MOVES.get(key)
+  return gait if gait is not None and covers(policy, gait) else MOVES[key]
+
+
 EMOTES = (  # clip, icon: each starts and ends in one pose, standing (most) or lying
   ("bow", "🙇"),
   ("pushups", "💪"),
@@ -588,7 +608,8 @@ def catalog(policies):
   """What the page offers: the moves, the emotes, the policies and what each one covers."""
   names = wlc.clip_names()
   clips = {}
-  for name in set(MOVES.values()) | {e for e, _ in EMOTES} | {"stand_up", "lie_down"}:
+  wanted = set(MOVES.values()) | set(GAIT_MOVES.values()) | {e for e, _ in EMOTES}
+  for name in wanted | {"stand_up", "lie_down"}:
     if name in names:
       c = wlc.Clip(name)
       title = (
@@ -722,7 +743,7 @@ def handler(session, info):
       elif path == "/api/move":
         key = str(body.get("key", "")).lower()
         ok, msg = (
-          session.ask("clip", MOVES[key])
+          session.ask("clip", move_clip(key, session.policy))
           if key in info["moves"]
           else (False, "no such move")
         )

@@ -1,4 +1,4 @@
-"""The scripted crawl as a clip for the real hand's loop and panel, and its checks.
+"""The scripted crawl as clips for the real hand's loop and panel, one per command.
 
 The planner of ``gait.py`` (smoothed: gait.SMOOTH_IK) walks CYCLES forward cycles from the stand; then the targets
 ease back to the stand over RETURN_S and hold (the loop wants every clip to start and
@@ -14,9 +14,11 @@ and plays the targets open loop on random simulated hands (gait_clips.py's range
 measuring what the loop guards: tilt (it stops at 40 deg) and the palm's "down" against
 the clip's (it stops past 15 deg).
 
-  uv run python scripts/gait_real_clip.py
+  uv run python scripts/gait_real_clip.py                     # every command but stand
+  uv run python scripts/gait_real_clip.py --commands forward
 """
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -33,7 +35,7 @@ import wlc  # noqa: E402
 
 # 3 cycles stayed up on 45 of 45 random hands; 6 tipped 13 of them past 20 deg in the
 # fifth cycle (open loop drifts; keeping a long walk up is the policy's job).
-NAME, CYCLES = "gait_forward", 3
+CYCLES = 3
 RETURN_S, HOLD_S = 3.0, 1.0
 
 
@@ -41,9 +43,9 @@ def ease(u: np.ndarray) -> np.ndarray:
   return u**3 * (10 - 15 * u + 6 * u * u)
 
 
-def targets(model: mujoco.MjModel) -> np.ndarray:
+def targets(model: mujoco.MjModel, command: str = "forward") -> np.ndarray:
   crawler = gait.Crawler(model, thumb_drag=True, smooth=gait.SMOOTH_IK)
-  keys, _ = gait.plan(crawler, ["forward"] * CYCLES)
+  keys, _ = gait.plan(crawler, [command] * CYCLES)
   stand = wlc.Clip("stand_up").q[-1]
   n = round(RETURN_S / gait.KEYFRAME_S)
   back = keys[-1] + ease(np.linspace(0, 1, n + 1)[1:, None]) * (stand - keys[-1])
@@ -86,11 +88,12 @@ def play(model: mujoco.MjModel, q: np.ndarray, grav: np.ndarray) -> dict:
   )
 
 
-def main() -> None:
-  hand = clips.RealHand()
-  q = targets(hand.model)
-  motion = clips.replay(NAME, hand, q=q)
-  clips.save(motion, hand, ROOT / "outputs" / "clips" / f"{NAME}.npz")
+def write(hand: clips.RealHand, command: str) -> None:
+  """real/clips/gait_<command>.npz and outputs/clips/gait_<command>.npz, checked."""
+  name = f"gait_{command}"
+  q = targets(hand.model, command)
+  motion = clips.replay(name, hand, q=q)
+  clips.save(motion, hand, ROOT / "outputs" / "clips" / f"{name}.npz")
 
   quat, pos = motion.qpos[:, 3:7], motion.qpos[:, :3]
   grav = palm_down(quat)
@@ -112,37 +115,44 @@ def main() -> None:
     fps=wlc.HZ,
     start="stand",
     end="stand",
-    title=f"Gait x{CYCLES}",
-    note=f"scripts/gait_real_clip.py: gait.py's planner, {CYCLES} forward cycles, then"
-    f" {RETURN_S:.0f} s back to the stand; grav and palm from the replay on clips.RealHand",
+    title=f"Gait {command.replace('_', ' ')} x{CYCLES}",
+    note=f"scripts/gait_real_clip.py: gait.py's smooth planner, {CYCLES} {command}"
+    f" cycles, then {RETURN_S:.0f} s back to the stand; grav and palm from the replay"
+    " on clips.RealHand",
   )
-  out = ROOT / "real" / "clips" / f"{NAME}.npz"
+  out = ROOT / "real" / "clips" / f"{name}.npz"
   np.savez_compressed(
     out, q=q.astype(np.float32), grav=grav.astype(np.float32),
     palm=path.astype(np.float32), meta=json.dumps(meta),
   )  # fmt: skip
   wlc.Clip(str(out))  # the loop's own checks
   stand = wlc.Clip("stand_up").q[-1]
-  print(
-    f"{out.relative_to(ROOT)}: {len(q) / wlc.HZ:.1f} s, fastest joint {speed:.1f} rad/s"
-    f" (the loop refuses 6), starts {np.abs(q[0] - stand).max():.3f} and ends"
-    f" {np.abs(q[-1] - stand).max():.3f} rad from the stand (0.05 allowed); the replay"
-    f" moves {path[-1, 0] * 1e3:+.0f} mm forward, {path[-1, 1] * 1e3:+.0f} mm left,"
-    f" {np.degrees(path[-1, 2]):+.0f} deg"
-  )
   runs = [
     play(gait_clips.random_hand(hand.model, np.random.default_rng(1 + i)), q, grav)
     for i in range(45)
   ]
   tilt = np.array([r["tilt"] for r in runs])
   off = np.array([r["off"] for r in runs])
-  moved = np.array([r["moved_mm"] for r in runs])
   print(
-    f"45 random hands, open loop: {45 - sum(r['fell'] for r in runs)} stayed up; tilt up"
-    f" to {tilt.max():.1f} deg (median {np.median(tilt):.1f}; the loop stops at 40); the"
-    f" palm's down up to {off.max():.1f} deg from the clip's (median {np.median(off):.1f};"
-    f" it stops past 15); moved {moved.min():.0f}-{moved.max():.0f} mm"
+    f"{name:16s} {len(q) / wlc.HZ:4.1f} s, {speed:.1f} rad/s, ends"
+    f" {np.abs(q[-1] - stand).max():.3f} rad from the stand | replay"
+    f" {path[-1, 0] * 1e3:+4.0f} fwd {path[-1, 1] * 1e3:+4.0f} left mm"
+    f" {np.degrees(path[-1, 2]):+4.0f} deg | 45 random hands: {45 - sum(r['fell'] for r in runs)}"
+    f" up, tilt <= {tilt.max():.1f} deg, down <= {off.max():.1f} deg from the clip's"
+    f" (the loop stops at 40 and 15)",
+    flush=True,
   )
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+  parser.add_argument(
+    "--commands", nargs="+", default=list(gait.GAIT_COMMANDS)[:-1], help="not stand"
+  )
+  args = parser.parse_args()
+  hand = clips.RealHand()
+  for command in args.commands:
+    write(hand, command)
 
 
 if __name__ == "__main__":

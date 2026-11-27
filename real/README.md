@@ -137,6 +137,17 @@ random simulated hands. The steering policy (W S Q E) corrected that in the earl
 A and D aren't in any trained policy yet. None of the moves or the new emotes has run on
 the real hand.
 
+### The fast gait on the keys
+
+`real/clips/gait_*.npz` (`scripts/gait_real_clip.py`): for each of W S A D Q E, three
+cycles of `gait.py`'s smooth crawl, stand to stand, about 9.5 s (forward 86 mm in the
+replay, turns 7-22 deg). With a policy that tracks them selected (`brik_gait_v3`:
+Walking-Leap-Motion-Gait-Flat-v3, on Hugging Face under its run's `real/`), the keys play
+those clips, driven by the policy, instead of the scripted steps. In simulation Gait-v3
+walks them as planned (forward 93 of 90 mm in three cycles, about 28 mm/s while walking)
+and falls under kicks less than a still hand. None has run on the real hand yet: shadow
+first.
+
 ### Your own policy on the panel
 
 1. **Export it,** on any machine with the repo (`uv sync` done). One clip: `--motion` and

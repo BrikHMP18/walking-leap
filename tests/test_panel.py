@@ -283,3 +283,17 @@ def test_exported_policies_are_named_and_keep_their_ranges(tmp_path):
   (params / "env.yaml").write_text("commands:\n  motion:\n    debug_vis: false\n")
   assert export_policy.trained_command_range(str(tmp_path / run)) is None
   assert export_policy.trained_command_range(str(tmp_path / "no_such_run")) is None
+
+
+def test_move_keys_play_the_gait_clips_a_policy_tracks():
+  """W A S D Q E play the scripted steps, or the fast gait clips (stand to stand) when
+  the selected policy tracks them."""
+  from types import SimpleNamespace
+
+  for name in server.GAIT_MOVES.values():
+    c = wlc.Clip(name)
+    assert (c.start, c.end) == ("stand", "stand"), name
+  tracker = SimpleNamespace(clip="gait", covers=lambda n: n.startswith("gait_"))
+  for key, step in server.MOVES.items():
+    assert server.move_clip(key, None) == step
+    assert server.move_clip(key, tracker) == server.GAIT_MOVES[key]
