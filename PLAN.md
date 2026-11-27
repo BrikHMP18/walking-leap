@@ -222,7 +222,18 @@ The trainings below that are checked come from a branch, not from this milestone
     - [x] Stage 2, Student-v1: gets up from 97 % of falls, takes kicks as Gait-v2 and
           recovers more (still down 0/31/25 %); commands right in sign but small (forward
           15 mm in three cycles against Gait-v2's 45)
-    - [ ] Stage 3 (Velocity-v0) and its check against Flat-v3
+    - [x] Stage 3 (Velocity-v0..v4): rewarded on velocity alone it barely translated
+          (forward at most 5.2 of 30 mm/s); Velocity-v5, rewarded on the clip, 5.7 mm/s
+          with the key held
+    - [x] A curriculum: Gait-v3 (smooth clip, light pushes) tracks at the planned speed
+          (forward 93 of 90 mm in three cycles); Gait-v4 adds 0.25 m/s pushes
+    - [x] A gait clock for the student (`mdp.gait_clock`; real/policy.py runs its own):
+          Student-v3 walks forward 32.2 of 27.7 mm/s with the key held, gets up from
+          100 % of falls (`scripts/eval_keys.py`, `eval_survival.py`); its numpy export
+          drives the simulated hand at 33.2 mm/s
+    - [ ] Turns, backwards and sideways: about the clip's own reach (turns 2-7 deg/s of
+          18.5); larger turns in the clip (gait_smooth2, Gait-v5, Student-v5) running
+    - [ ] On the real hand: brik_keys_student_v3 on the panel, shadow then live
   - [ ] A velocity-command student: distill v1 (teacher, given the planner's
         reference for a commanded velocity) into a policy that sees only the command,
         encoders and IMU, then fine-tune it with PPO on velocity tracking

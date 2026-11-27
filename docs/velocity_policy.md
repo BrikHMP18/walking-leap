@@ -171,3 +171,21 @@ forward at the commanded speed. The exported numpy policy, its clock running, dr
 simulated hand forward at 33.2 mm/s. Back, sideways and turning stay at about the
 clip's own (weak) reach; Velocity-v6 (PPO on the clip's rewards with the clock, from
 Student-v3) and Student-v4 (the clock student of Gait-v4 under moderate pushes) run.
+
+Later that night (same tests):
+
+| Policy | Forward | Back / left / right | Turns | Gets up | Kicks: fell, still down |
+| --- | --- | --- | --- | --- | --- |
+| Student-v4 (clock, of Gait-v4, 0.25 m/s pushes) | 22.0 | -4.1 / 1.6 / -3.1 | +2.2 / -2.4 | 100 % | 19/50/88 %, 3/16/38 % |
+| Velocity-v6 (PPO from Student-v3, clip rewards) | 26.1 (drifts -10.5 left) | -3.9 / 3.9 / -2.5 | +3.6 / -4.7 | 100 % | 34/53/78 %, 6/25/47 % |
+| Velocity-v7 (v6, planned velocity x3) | 28.6 | -3.3 / 2.0 / -1.9 | +2.4 / -6.6 | 94 % | 25/62/75 %, 3/22/28 % |
+
+PPO after the clock student did not beat it. Turning is limited by the clip: its turn
+cycles turn about a fifth of their plan. gait.FAST_TURN_COMMANDS (left 60, right 40 deg
+a cycle) turns the replay about twice as far; Gait-v5 and Student-v5 train on it.
+
+**For the demo (2026-11-27):** `brik_keys_student_v3` (Hugging Face, its run's `real/`),
+a keyboard velocity policy on the panel: hold W to walk forward about 30 mm/s in
+simulation; it gets up by itself in simulation (the real loop stops at 40 deg of tilt).
+`brik_gait_v3` / `brik_gait_v4`: trackers of the six fast gait clips on the move keys.
+None of them has run on the real hand yet: shadow first, then live.
