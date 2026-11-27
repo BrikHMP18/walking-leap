@@ -8,16 +8,16 @@ let S = {}; // the latest state from the stream
 const FINGERS = [['IF', 0], ['MF', 4], ['RF', 8], ['TH', 12]];
 
 // ------------------------------------------------------------------ commands
-async function api(path, body) {
+async function api(path, body, quiet) {
   try {
     const r = await fetch('/api/' + path, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}),
     });
     const j = await r.json();
-    if (!j.ok) toast(j.msg, true);
+    if (!j.ok && !quiet) toast(j.msg, true);
     return j;
   } catch (e) {
-    toast('the panel server does not answer', true);
+    if (!quiet) toast('the panel server does not answer', true);
     return { ok: false };
   }
 }
@@ -294,10 +294,36 @@ function covers(name) {
   const p = config.policies[S.policy];
   return !!(p && p.covers.includes(name));
 }
+// A velocity policy walks while a key is held: the page repeats the key (the server
+// stands the hand still when it stops hearing it), and releases it on keyup or blur.
+function velocity() {
+  const p = config.policies[S.policy];
+  return !!(p && p.kind === 'velocity');
+}
+let held = null, heldTimer = null;
+function walkSend(quiet, start) { return api('walk', { key: held, start: !!start }, quiet); }
+async function hold(key) {
+  const p = config.policies[S.policy], cmd = config.walk[key];
+  if (!p || !cmd) return;
+  if (!p.commands[cmd]) return toast(`${S.policy} has no ${cmd.replace('_', ' ')}`, true);
+  if (held === key) return;
+  held = key;
+  clearInterval(heldTimer);
+  heldTimer = setInterval(() => walkSend(true), 150);
+  const j = await walkSend(false, true);
+  if (!j.ok && held === key) release(key);
+}
+function release(key) {
+  if (held === null || (key && held !== key)) return;
+  held = null;
+  clearInterval(heldTimer);
+  heldTimer = null;
+  walkSend(true);
+}
 function buildSide() {
   const sel = $('policy');
   sel.innerHTML = '<option value="">No policy · the scripts</option>' + Object.entries(config.policies)
-    .map(([n, p]) => `<option value="${n}">${n} · ${p.covers.length} clips${p.imu ? '' : ' · no IMU'}</option>`).join('');
+    .map(([n, p]) => `<option value="${n}">${n} · ${p.kind === 'velocity' ? 'walks (hold the keys)' : p.covers.length + ' clips'}${p.imu ? '' : ' · no IMU'}</option>`).join('');
   sel.onchange = () => api('policy', { name: sel.value || null, live: false });
   document.querySelectorAll('#seg-live button').forEach((b) => (b.onclick = async () => {
     const live = b.dataset.live === '1';
@@ -315,9 +341,12 @@ function buildSide() {
     const clip = config.clips[config.moves[b.dataset.key]];
     if (!clip) { b.disabled = true; b.title = 'no clip'; return; }
     const t = clip.travel || [0, 0, 0];
-    b.title = `${clip.title}: ${clip.seconds} s, planned ${t[0]} mm forward, ${t[1]} mm left, ${t[2]}°`;
-    b.onclick = () => press(b.dataset.key);
+    b.dataset.clipTitle = `${clip.title}: ${clip.seconds} s, planned ${t[0]} mm forward, ${t[1]} mm left, ${t[2]}°`;
+    b.onclick = () => { if (!velocity()) press(b.dataset.key); };
+    b.onpointerdown = (e) => { if (velocity()) { e.preventDefault(); hold(b.dataset.key); } };
+    b.onpointerup = b.onpointerleave = b.onpointercancel = () => release(b.dataset.key);
   });
+  $('btn-walk-end').onclick = () => { release(); api('walk', { end: true }); };
 }
 function press(key) {
   const b = document.querySelector(`.key[data-key="${key}"]`);
@@ -338,18 +367,38 @@ function render() {
   const cc = $('chip-clip');
   cc.hidden = !moving;
   if (moving) cc.textContent = `${(config.clips[S.clip] || {}).title || S.clip}${S.policy_on ? (S.live ? ' · policy LIVE' : ' · policy shadow') : ''}`;
+  if (S.walking) {
+    cc.hidden = false;
+    cc.textContent = `Walking · ${(S.walk_cmd || 'stand').replace('_', ' ')} · ${S.live ? 'LIVE' : 'shadow'}`;
+  }
   $('btn-connect').disabled = S.state !== 'off';
   $('btn-stand').disabled = !on || where !== 'lying' || moving;
   $('btn-lie').disabled = !on || where === 'lying';
   $('btn-end').disabled = !on;
   const standing = on && (where === 'stand' || where === 'moving');
+  const walks = velocity(), vp = config.policies[S.policy];
   document.querySelectorAll('.key').forEach((b) => {
-    const name = config.moves[b.dataset.key];
-    if (!name) return;
+    const name = config.moves[b.dataset.key], cmd = config.walk[b.dataset.key];
+    if (walks) {
+      const v = vp.commands[cmd];
+      b.disabled = !standing || !v || (moving && !S.walking);
+      b.title = v ? `hold: ${cmd.replace('_', ' ')}, ${v[2] ? v[2] + '°/s' : Math.max(Math.abs(v[0]), Math.abs(v[1])) + ' mm/s'} (as trained)` : 'not in this policy';
+      b.querySelector('i').className = v ? 'policy' : '';
+      b.classList.toggle('playing', S.walking && S.walk_cmd === cmd);
+      return;
+    }
+    if (!name) { b.disabled = true; return; }
     b.disabled = !standing;
+    b.title = b.dataset.clipTitle || '';
     b.querySelector('i').className = covers(name) ? 'policy' : '';
     b.classList.toggle('playing', S.clip === name);
   });
+  $('move-sub').textContent = walks ? 'hold to walk · release: stand still' : 'W A S D · Q E';
+  $('btn-walk-end').hidden = !S.walking;
+  if (held !== null) {  // its button got disabled under the finger: no pointerup will come
+    const hb = document.querySelector(`.key[data-key="${held}"]`);
+    if (hb && hb.disabled) release();
+  }
   document.querySelectorAll('.emote').forEach((b) => {
     b.disabled = !standing;
     b.querySelector('i').className = covers(b.dataset.name) ? 'policy' : '';
@@ -361,8 +410,11 @@ function render() {
   const p = config.policies[S.policy];
   $('policy-hint').innerHTML = !p
     ? 'Every clip plays as written (open loop).'
-    : `Drives (green dot): ${p.covers.map((n) => (config.clips[n] || {}).title || n).join(', ')}. The rest play as written.`
-      + (S.live ? ' <b style="color:var(--warn)">Live: its targets go to the motors.</b>' : ' Shadow: computed and logged, the clip is sent.');
+    : p.kind === 'velocity'
+      ? 'Walks while W A S D Q E is held, at the speeds it trained on; released, it stands still. Emotes play as written (the walk ends first).'
+        + (S.live ? ' <b style="color:var(--warn)">Live: it walks.</b>' : ' Shadow: the hand holds its stance, the policy is computed and logged.')
+      : `Drives (green dot): ${p.covers.map((n) => (config.clips[n] || {}).title || n).join(', ')}. The rest play as written.`
+        + (S.live ? ' <b style="color:var(--warn)">Live: its targets go to the motors.</b>' : ' Shadow: computed and logged, the clip is sent.');
   $('queue').textContent = S.queue && S.queue.length ? S.queue.map((n) => (config.clips[n] || {}).title || n).join(' → ') : '–';
   const f = (v, unit, d = 1) => (v === null || v === undefined ? '–' : `${Number(v).toFixed(d)}${unit}`);
   $('hud-tilt').textContent = f(S.tilt, '°');
@@ -411,10 +463,18 @@ async function main() {
   $('btn-reset-map').onclick = () => api('reset_map');
   addEventListener('keydown', (e) => {
     if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
-    if (e.key === 'Escape') { api('stop'); return; }
+    if (e.key === 'Escape') { release(); api('stop'); return; }
     const k = e.key.toLowerCase();
+    if (velocity()) {
+      if (config.walk[k]) { e.preventDefault(); if (!e.repeat) hold(k); }
+      else if (e.key === ' ') { e.preventDefault(); release(); }
+      return;
+    }
     if (!e.repeat && config.moves[k]) press(k);
   });
+  addEventListener('keyup', (e) => { if (held) release(e.key.toLowerCase()); });
+  addEventListener('blur', () => release());
+  document.addEventListener('visibilitychange', () => { if (document.hidden) release(); });
   const first = await fetch('/api/state').then((r) => r.json());
   S = first;
   addEvents(first.events || []);

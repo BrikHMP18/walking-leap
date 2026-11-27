@@ -11,6 +11,11 @@ The page sends commands; one session thread runs the loop (wlc.Control) with all
 guards, and plays clips one after the other: stand up, the moves (W S A D Q E), the
 emotes, lie down. Between clips it holds the pose, still checking. STOP (or Esc) lies
 the hand down, then torque off. Everything is logged as with ``wl`` (outputs/real/logs).
+
+With a velocity policy (``kind`` "velocity", a gait student) the same keys walk instead:
+held, the policy gets that command every tick (Control.steer, as ``wl play ... steer``);
+released, or the page silent for WALK_ALIVE_S, it stands still. A clip asked for ends the
+walk first (a second standing still, then back to the stance).
 """
 
 import argparse
@@ -29,7 +34,7 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 import wlc  # noqa: E402
-from policy import MotionPolicy  # noqa: E402
+from policy import MotionPolicy, VelocityPolicy  # noqa: E402
 
 STATIC = os.path.join(HERE, "static")
 MOVES = {  # key: clip (real/clips/)
@@ -58,6 +63,51 @@ TITLES = {
   "crawl": "Crawl ×3",
 }
 QUEUE_MAX = 4
+WALK = {  # key: a velocity policy's command (walking_leap.clips.GAIT_KEYS)
+  "w": "forward",
+  "s": "back",
+  "a": "left",
+  "d": "right",
+  "q": "turn_left",
+  "e": "turn_right",
+}
+WALK_ALIVE_S = 0.4  # a held key is repeated by the page; silent this long: stand still
+
+
+def policy_kind(path):
+  with np.load(path) as d:
+    return str(d["kind"]) if "kind" in d.files else "motion"
+
+
+def load_policy(path):
+  return VelocityPolicy(path) if policy_kind(path) == "velocity" else MotionPolicy(path)
+
+
+def covers(policy, name):
+  """A motion policy that plays along this clip (a velocity policy plays none)."""
+  return policy is not None and policy.clip is not None and policy.covers(name)
+
+
+class PageKeys:
+  """What Control.steer reads, from the page: the held key's command when it changes,
+  "stand" when released or when the page went silent, "quit" to end the walk."""
+
+  HELP = "hold W A S D Q E to walk, release to stand still"
+
+  def __init__(self, session):
+    self.s, self.last = session, "stand"
+
+  def read(self):
+    s = self.s
+    if s.walk_quit:
+      s.walk_cmd = "stand"
+      return "quit"
+    fresh = time.monotonic() - s.walk_seen < WALK_ALIVE_S
+    want = (s.walk_key if fresh else None) or "stand"
+    if want == self.last:
+      return None
+    self.last = s.walk_cmd = want
+    return want
 
 
 def r(x, n=4):
@@ -93,6 +143,9 @@ class Session:
       None,
     )  # the twin's true palm pose, and where the map started
     self.map_epoch = 0  # the map starts again where the hand stood up
+    # Walking with a velocity policy: the held command (from the page) and when it came.
+    self.walking, self.walk_pending, self.walk_quit = False, False, False
+    self.walk_key, self.walk_seen, self.walk_cmd = None, 0.0, "stand"
 
   # --------------------------------------------------------------- from the page
   def event(self, text):
@@ -120,6 +173,8 @@ class Session:
   def ask(self, kind, name=None):
     if self.state != "on":
       return False, "connect first"
+    if self.walking:
+      self.walk_quit = True  # the walk ends first (a second still, back to the stance)
     if kind == "end":
       self.queue.clear()
       self.cmds.put(("end", None))
@@ -133,8 +188,10 @@ class Session:
   def set_policy(self, name, live):
     if name and name not in self.policies:
       return False, f"no policy {name}"
+    if self.walking or self.walk_pending:
+      return False, "stop walking first"
     self.policy_name, self.live = name or None, bool(live and name)
-    self.policy = MotionPolicy(self.policies[name]) if name else None
+    self.policy = load_policy(self.policies[name]) if name else None
     if self.ctl is not None:
       self.ctl.policy, self.ctl.live = self.policy, self.live
     what = (
@@ -144,6 +201,29 @@ class Session:
     )
     self.event(f"policy: {what}")
     return True, what
+
+  def walk(self, command, start=False):
+    """The page's held key as a command name, or None (released); repeated while held.
+    Only a key going down (``start``) begins a walk; the repeats only keep it going."""
+    if self.state != "on":
+      return False, "connect first"
+    if not isinstance(self.policy, VelocityPolicy):
+      return False, "walking needs a velocity policy"
+    if command is not None and command not in self.policy.commands:
+      return False, f"{self.policy_name} has no {command}"
+    self.walk_key, self.walk_seen = command, time.monotonic()
+    if command is not None and start and not (self.walking or self.walk_pending):
+      if self.queue:
+        return False, "the queue first (or clear it)"
+      self.walk_pending = True
+      self.cmds.put(("walk", None))
+    return True, command or "stand"
+
+  def end_walk(self):
+    if not (self.walking or self.walk_pending):
+      return False, "not walking"
+    self.walk_quit, self.walk_key = True, None
+    return True, "standing still, then back to the stance"
 
   # --------------------------------------------------------------- the session thread
   def devices(self):
@@ -171,6 +251,12 @@ class Session:
       p = clip.palm[min(t["frame"], len(clip.palm) - 1)]
       c, s = np.cos(self.base[2]), np.sin(self.base[2])
       self.est = self.base + np.array([c * p[0] - s * p[1], s * p[0] + c * p[1], p[2]])
+    elif self.walking and self.live:  # the command's velocity, integrated: a plan too
+      v = self.policy.commands.get(self.walk_cmd, np.zeros(3))
+      c, s = np.cos(self.est[2]), np.sin(self.est[2])
+      self.est = (
+        self.est + np.array([c * v[0] - s * v[1], s * v[0] + c * v[1], v[2]]) / wlc.HZ
+      )
     pq, cq = t["policy_q"], t["clip_q"]
     snap = dict(
       q=r(t["q"]),
@@ -214,7 +300,7 @@ class Session:
       return
     self.base = self.est.copy()
     self.clip = clip
-    on = self.policy is not None and self.policy.covers(name)
+    on = covers(self.policy, name)
     self.event(
       f"{name}: playing{' (policy ' + ('LIVE' if self.live else 'shadow') + ')' if on else ''}"
     )
@@ -227,6 +313,27 @@ class Session:
     self.where = ctl.where
     if name == "stand_up":
       self.reset_map()
+
+  def walk_loop(self, ctl):
+    """Control.steer with the page's keys, from the stance and back to it."""
+    self.walk_pending = False
+    if ctl.where != "stand":
+      self.event(f"walking starts standing, the hand is {ctl.where}: skipped")
+      return
+    if not isinstance(self.policy, VelocityPolicy):
+      self.event("walking needs a velocity policy: skipped")
+      return
+    self.walking, self.walk_cmd = True, "stand"
+    try:
+      ctl.steer(PageKeys(self), ctl.q.copy())
+    finally:
+      self.walking, self.walk_quit, self.walk_key, self.walk_cmd = (
+        False,
+        False,
+        None,
+        "stand",
+      )
+    self.where = ctl.where
 
   def reset_map(self):
     self.est[:], self.base[:], self.yaw_gyro, self.sim0 = 0.0, 0.0, 0.0, None
@@ -269,6 +376,12 @@ class Session:
         except Exception as e:  # noqa: BLE001
           self.event(f"log not written: {e}")
       self.ctl, self.clip, self.queue, self.state = None, None, [], "off"
+      self.walking, self.walk_pending, self.walk_quit, self.walk_key = (
+        False,
+        False,
+        False,
+        None,
+      )
       self.event("torque off")
 
   def _recorder_event(self, original):
@@ -299,6 +412,9 @@ class Session:
             )
             if np.nanmax(t) > 60:
               raise wlc.SoftStop(f"a motor is at {np.nanmax(t):.0f} C") from None
+          continue
+        if kind == "walk":
+          self.walk_loop(ctl)
           continue
         if name in self.queue:
           self.queue.remove(name)
@@ -341,7 +457,10 @@ class Session:
       queue=list(self.queue),
       policy=self.policy_name,
       live=self.live,
-      policy_on=bool(clip is not None and self.policy is not None and self.policy.covers(clip.name)),
+      policy_on=bool(self.walking or (clip is not None and covers(self.policy, clip.name))),
+      policy_kind=None if self.policy is None else ("velocity" if isinstance(self.policy, VelocityPolicy) else "motion"),
+      walking=self.walking,
+      walk_cmd=self.walk_cmd if self.walking else None,
       temps=[None if np.isnan(x) else round(x) for x in self.temps],
       event_id=self.event_id,
       map_epoch=self.map_epoch,
@@ -375,15 +494,25 @@ def catalog(policies):
       clips[name] = dict(title=title, seconds=round(len(c.q) / wlc.HZ, 1), note=c.meta.get("note", ""), travel=travel)  # fmt: skip
   pols = {}
   for name, path in policies.items():
-    with np.load(path) as d:
-      kind = str(d["kind"]) if "kind" in d.files else "motion"
-    if kind != "motion":  # a velocity student: `real/wl play stand_up steer lie_down`
+    kind = policy_kind(path)
+    if kind == "velocity":  # walks on the keys: each command's velocity, mm/s and deg/s
+      p = VelocityPolicy(path)
+      pols[name] = dict(
+        kind=kind, inputs=int(p.mean.size), imu=True, covers=[],
+        commands={
+          c: [round(v[0] * 1e3, 1), round(v[1] * 1e3, 1), round(float(np.degrees(v[2])), 1)]
+          for c, v in p.commands.items()
+        },
+      )  # fmt: skip
+      continue
+    if kind != "motion":
       print(f"{name}: a {kind} policy, not offered on the panel")
       continue
     p = MotionPolicy(path)
     pols[name] = dict(
-      inputs=int(p.mean.size), imu=p.imu, covers=sorted(n for n in names if p.covers(n))
-    )
+      kind=kind, inputs=int(p.mean.size), imu=p.imu,
+      covers=sorted(n for n in names if p.covers(n)),
+    )  # fmt: skip
   return dict(
     moves={k: v for k, v in MOVES.items() if v in clips},
     emotes=[dict(name=n, icon=i) for n, i in EMOTES if n in clips],
@@ -477,6 +606,14 @@ def handler(session, info):
         ok, msg = (
           session.ask("clip", name) if name in known else (False, "no such emote")
         )
+      elif path == "/api/walk":  # repeated while a key is held: refusals not logged
+        if body.get("end"):
+          ok, msg = session.end_walk()
+        else:
+          key = body.get("key")
+          command = WALK.get(str(key).lower()) if key else None
+          ok, msg = session.walk(command, bool(body.get("start")))
+        return self.send(200, {"ok": ok, "msg": msg})
       elif path == "/api/policy":
         ok, msg = session.set_policy(body.get("name"), body.get("live", False))
       elif path == "/api/clear":
@@ -514,7 +651,11 @@ def main() -> int:
   gains = tuple(int(x) for x in a.gains.split(","))
   policies = find_policies()
   info = dict(
-    catalog(policies), mode=kind, gains=gains, rest_q=r(wlc.Clip("stand_up").q[0])
+    catalog(policies),
+    mode=kind,
+    gains=gains,
+    rest_q=r(wlc.Clip("stand_up").q[0]),
+    walk=WALK,
   )
   session = Session(kind, gains, policies)
   if kind == "real":
