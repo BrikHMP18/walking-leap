@@ -436,6 +436,25 @@ def walking_leap_lying_goal_env_cfg(
   return cfg
 
 
+def walking_leap_lying_track_v1_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+  """``Walking-Leap-Lying-Track-Flat-v1``: the tracker with the far costs on the policy's
+  targets (Lying-v3's). Track-v0 at iteration 600 on the twin played forward and back
+  but held the thumb's base at its limit 1.5 s at the end of the turn and back clips.
+  Fine-tuned from Track-v0."""
+  cfg = walking_leap_lying_track_env_cfg(play=play)
+  cfg.rewards["held_far"] = RewardTermCfg(
+    func=lm.held_far_goal,
+    weight=FAR_WEIGHT,
+    params={"error": FAR_ERROR, "grace": FAR_GRACE},
+  )
+  cfg.rewards["far_now"] = RewardTermCfg(
+    func=lm.far_goals,
+    weight=FAR_NOW_WEIGHT,
+    params={"error": FAR_ERROR, "span": FAR_SPAN},
+  )
+  return cfg
+
+
 def walking_leap_lying_v3_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
   """The lying learner with half the initial exploration noise (std 0.5)."""
   cfg = walking_leap_lying_ppo_runner_cfg()

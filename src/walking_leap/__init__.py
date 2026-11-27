@@ -28,6 +28,7 @@ from walking_leap.lying_cfg import (
   walking_leap_lying_low_v4_env_cfg,
   walking_leap_lying_ppo_runner_cfg,
   walking_leap_lying_track_env_cfg,
+  walking_leap_lying_track_v1_env_cfg,
   walking_leap_lying_v1_env_cfg,
   walking_leap_lying_v2_env_cfg,
   walking_leap_lying_v3_env_cfg,
@@ -387,6 +388,13 @@ register_mjlab_task(
   task_id="Walking-Leap-Lying-Track-Flat-v0",
   env_cfg=walking_leap_lying_track_env_cfg(),
   play_env_cfg=walking_leap_lying_track_env_cfg(play=True),
+  rl_cfg=walking_leap_crawl_ppo_runner_cfg(),
+  runner_cls=MotionTrackingOnPolicyRunner,
+)
+register_mjlab_task(
+  task_id="Walking-Leap-Lying-Track-Flat-v1",
+  env_cfg=walking_leap_lying_track_v1_env_cfg(),
+  play_env_cfg=walking_leap_lying_track_v1_env_cfg(play=True),
   rl_cfg=walking_leap_crawl_ppo_runner_cfg(),
   runner_cls=MotionTrackingOnPolicyRunner,
 )
