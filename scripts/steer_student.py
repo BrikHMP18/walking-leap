@@ -23,7 +23,7 @@ from mjlab.tasks.registry import load_env_cfg
 from scripted_gaits import TELEOP_KEYS
 from watch import LabeledViewer, label
 
-from walking_leap.clips import gait_command_velocities, gait_cycle_s, trained_clip
+from walking_leap.clips import gait_command_velocities, gait_cycle_periods, trained_clip
 
 
 def main() -> None:
@@ -58,13 +58,19 @@ def main() -> None:
 
   term.func, term.params = keyboard_command, {}
   if "clock" in cfg.observations[group].terms:  # a clock student: run its gait clock
-    period, ticks = gait_cycle_s(), {"n": 0}
+    periods = gait_cycle_periods(
+      clip if clip.startswith("gait_smooth") else "gait_smooth"
+    )
+    ticks = {"phase": 0.0}
 
     def keyboard_clock(env: ManagerBasedRlEnv) -> torch.Tensor:
+      # The phase advances over the held key's cycle (larger turns: longer cycles).
       if not torch.any(state["command"]):
-        ticks["n"] = 0
-      angle = 2 * np.pi * ((ticks["n"] * env.step_dt / period) % 1.0)
-      ticks["n"] += 1 if torch.any(state["command"]) else 0
+        ticks["phase"] = 0.0
+      angle = 2 * np.pi * ticks["phase"]
+      if torch.any(state["command"]):
+        period = periods.get(state["name"], 1.04)
+        ticks["phase"] = (ticks["phase"] + env.step_dt / period) % 1.0
       fallen = env.command_manager.get_term("motion").fallen[:, None]
       clock = torch.tensor([np.sin(angle), np.cos(angle)], device=env.device)
       still = torch.tensor([0.0, 1.0], device=env.device)

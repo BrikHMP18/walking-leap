@@ -134,7 +134,10 @@ def export_velocity(
   n = d["obs_normalizer._mean"].shape[-1]
   clock = n == STUDENT_HISTORY * 59  # a clock student: it runs its own gait clock
   if clock:
-    from walking_leap.clips import gait_cycle_s
+    from walking_leap.clips import gait_cycle_periods, gait_cycle_s
+
+    # The clock's period per key, from the clip it trained on (larger turns, longer cycles).
+    periods = gait_cycle_periods(clip if clip.startswith("gait_smooth") else "gait_smooth")
 
   def save(eps: float) -> None:
     w = {}
@@ -151,7 +154,14 @@ def export_velocity(
       scale=ACTION_SCALE,
       lo=[limits[n][0] for n in J],
       hi=[limits[n][1] for n in J],
-      **({"clock_period": gait_cycle_s()} if clock else {}),
+      **(
+        {
+          "clock_period": gait_cycle_s(),
+          "clock_periods": np.array([periods.get(k, gait_cycle_s()) for k in commands]),
+        }
+        if clock
+        else {}
+      ),
       command_names=list(commands),
       command_values=np.array(list(commands.values())),
       **({} if command_range is None else {"command_range": command_range}),

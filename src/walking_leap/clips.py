@@ -494,3 +494,19 @@ def trained_clip(run: Path) -> str:
   text = env.read_text() if env.exists() else ""
   match = re.search(r"motion_file:\s*['\"]?\S*?/(\w+)\.npz", text)
   return match.group(1) if match else "gait"
+
+
+def gait_cycle_periods(clip: str = "gait_smooth") -> dict[str, float]:
+  """Each command's gait cycle, s (median over the clip's cycles of that command alone):
+  a clock policy's clock period for that key. In gait_smooth all are 1.02-1.14 s; in
+  gait_smooth2 the larger turns take 1.83 s (left) and 1.54 s (right)."""
+  data = np.load(CLIPS_DIR / f"{clip}.npz")
+  phase, planned = data["phase"], data["command"]
+  starts = np.flatnonzero(np.diff(phase) < 0) + 1
+  out: dict[str, list[float]] = {}
+  for a, b in zip(starts[:-1], starts[1:], strict=True):
+    c = planned[a]
+    for name, axis, sign in GAIT_KEYS:
+      if np.count_nonzero(c) == 1 and np.sign(c[axis]) == sign:
+        out.setdefault(name, []).append((b - a) / FPS)
+  return {name: float(np.median(v)) for name, v in out.items()}

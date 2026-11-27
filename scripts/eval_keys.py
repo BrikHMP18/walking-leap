@@ -22,7 +22,7 @@ from mjlab.envs import ManagerBasedRlEnv
 from mjlab.rl import RslRlVecEnvWrapper
 from mjlab.tasks.registry import load_env_cfg
 
-from walking_leap.clips import gait_command_velocities, gait_cycle_s, trained_clip
+from walking_leap.clips import gait_command_velocities, gait_cycle_periods, trained_clip
 
 ROOT = Path(__file__).parents[1]
 HANDS, STAND_S, HOLD_S = 8, 2.0, 8.0
@@ -47,7 +47,10 @@ def hold(policy, key: str, device: str) -> dict:
 
   terms["command"].func, terms["command"].params = command, {}
   if "clock" in terms:
-    period = gait_cycle_s()
+    clip = trained_clip(policy.checkpoint.parent)
+    period = gait_cycle_periods(
+      clip if clip.startswith("gait_smooth") else "gait_smooth"
+    )[key]
 
     def clock(env):
       angle = 2 * math.pi * ((state["ticks"] * env.step_dt / period) % 1.0)

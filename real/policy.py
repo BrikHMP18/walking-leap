@@ -134,6 +134,11 @@ class VelocityPolicy(MotionPolicy):
     self.lo, self.hi = d["lo"].astype(float), d["hi"].astype(float)
     self.history = int(d["history"])
     self.clock_period = float(d["clock_period"]) if "clock_period" in d.files else None
+    # Per command (aligned with command_names), when the clip's cycles differ by command:
+    # the clock runs at the period of the key whose velocity the command is closest to.
+    self.clock_periods = (
+      d["clock_periods"].astype(float) if "clock_periods" in d.files else None
+    )
     sizes = VELOCITY_SIZES if self.clock_period is None else CLOCK_SIZES
     assert self.mean.size == self.history * sum(sizes), "inputs do not add up"
     self.clip = None  # no clip: the loop's steer step
@@ -154,13 +159,29 @@ class VelocityPolicy(MotionPolicy):
     self.last = np.zeros(16)
     self.past = None  # per input: HISTORY frames, oldest first
     self.ticks = 0  # 50 Hz ticks of the gait clock since the command started
+    self.phase = 0.0  # the clock's phase, 0 to 1
+
+  def period(self, command):
+    """The clock's period for ``command``: the closest key's (unit vectors, scaled to
+    each axis' largest key) or the single ``clock_period``."""
+    if self.clock_periods is None:
+      return self.clock_period
+    keys = np.array(list(self.commands.values()))
+    scale = np.abs(keys).max(0) + 1e-9
+    k, c = keys / scale, np.asarray(command, float) / scale
+    sim = (k @ c) / (np.linalg.norm(k, axis=1) * np.linalg.norm(c) + 1e-12)
+    return float(self.clock_periods[int(np.argmax(sim))])
 
   def clock(self, command):
-    """The gait clock's (sin, cos): runs while ``command`` is not zero, else 0."""
+    """The gait clock's (sin, cos): runs while ``command`` is not zero, else 0. The
+    phase advances by one tick over the command's period (``period``)."""
     if not np.any(command):
-      self.ticks = 0
+      self.ticks, self.phase = 0, 0.0
       return np.array([0.0, 1.0])
-    angle = 2.0 * np.pi * ((self.ticks / 50.0 / self.clock_period) % 1.0)
+    if self.ticks == 0:
+      self.phase = 0.0
+    angle = 2.0 * np.pi * self.phase
+    self.phase = (self.phase + 1.0 / 50.0 / self.period(command)) % 1.0
     self.ticks += 1
     return np.array([np.sin(angle), np.cos(angle)])
 
