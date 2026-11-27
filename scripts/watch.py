@@ -35,6 +35,7 @@ DOES = {
   "Walking-Leap-Motion-Gait-Flat-Velocity-v1": "keyboard velocity (RL, split reward)",
   "Walking-Leap-Motion-Gait-Flat-Velocity-v2": "keyboard velocity (RL, explores more)",
   "Walking-Leap-Motion-Gait-Flat-Velocity-v3": "keyboard velocity (RL, light pushes)",
+  "Walking-Leap-Motion-Gait-Flat-Velocity-v4": "keyboard velocity (RL, clean world)",
 }
 
 

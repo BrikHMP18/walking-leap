@@ -133,3 +133,8 @@ Velocity-v1 (the term split, Flat-v3's scales, from v0's end) reached forward 4.
 after 500 iterations: better, still standing too much (noise 0.1, learning rate 3e-4).
 Velocity-v2 (translation weight 3, noise 0.3, learning rate 1e-3) runs from v1's
 model_2000 and, as a check on what the teachers pass on, from scratch.
+
+Velocity-v3 (Gait-v1's 0.1 m/s pushes, entropy 0.01) and Velocity-v4 (a diagnosis: no
+pushes, cables, random physics or sensor noise, as Walking-Leap-Flat-v3 trained, the one
+policy that walked about 20 of 30 mm/s) both continue from Velocity-v2's model_2300.
+Comparing them tells whether the perturbations held the walking back.

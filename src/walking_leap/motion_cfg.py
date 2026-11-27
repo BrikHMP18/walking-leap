@@ -726,3 +726,15 @@ def walking_leap_velocity_v3_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg
   if "push" in cfg.events:
     cfg.events["push"].params["velocity_range"] = PUSH_RANGE
   return cfg
+
+
+def walking_leap_velocity_v4_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+  """A diagnosis: Velocity-v3 in a clean world, as Walking-Leap-Flat-v3 trained (the
+  one policy that walked about 20 of 30 mm/s): no pushes, no cables, no random motors,
+  grip, balance or encoder bias, no sensor noise. The driver's setpoint limit and the
+  fallen starts stay. If it walks here, the perturbations held the others back."""
+  cfg = walking_leap_velocity_v3_env_cfg(play=play)
+  for name in list(cfg.events):
+    del cfg.events[name]
+  cfg.observations["actor"].enable_corruption = False
+  return cfg

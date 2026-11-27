@@ -33,6 +33,7 @@ from walking_leap.motion_cfg import (
   walking_leap_velocity_v1_env_cfg,
   walking_leap_velocity_v2_env_cfg,
   walking_leap_velocity_v3_env_cfg,
+  walking_leap_velocity_v4_env_cfg,
 )
 from walking_leap.robot import MEASURED_STIFFNESS, TORSION
 from walking_leap.runner import (
@@ -194,6 +195,16 @@ register_mjlab_task(
   task_id="Walking-Leap-Motion-Gait-Flat-Velocity-v3",
   env_cfg=walking_leap_velocity_v3_env_cfg(),
   play_env_cfg=walking_leap_velocity_v3_env_cfg(play=True),
+  rl_cfg=walking_leap_velocity_v3_ppo_runner_cfg(),
+  runner_cls=ExploringStudentPpoRunner,
+)
+
+# A diagnosis: Velocity-v3 with no perturbation at all (no pushes, cables, random
+# physics or noise), as Flat-v3 walked. Continues from v2.
+register_mjlab_task(
+  task_id="Walking-Leap-Motion-Gait-Flat-Velocity-v4",
+  env_cfg=walking_leap_velocity_v4_env_cfg(),
+  play_env_cfg=walking_leap_velocity_v4_env_cfg(play=True),
   rl_cfg=walking_leap_velocity_v3_ppo_runner_cfg(),
   runner_cls=ExploringStudentPpoRunner,
 )
