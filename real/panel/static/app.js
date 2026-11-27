@@ -32,9 +32,9 @@ function toast(text, bad) {
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 // What each guard of wlc.Control.guard means, for the stop banner.
 const ABORT_HINTS = [
-  [/current limit/, 'A motor stayed at its 350 mA cap for 1.5 s: pushed too hard, or blocked.'],
-  [/^ABORT: tilt \d+ deg/, 'The palm tilted past 40°.'],
-  [/away from the sim/, 'The palm\'s "down" left the clip\'s by more than 15°.'],
+  [/current limit/, 'A motor stayed near its 450 mA cap for 3 s: pushed too hard, or blocked.'],
+  [/^ABORT: tilt \d+ deg/, 'The palm tilted past 70°.'],
+  [/away from the sim/, 'The palm\'s "down" left the clip\'s by more than 25° for 0.3 s.'],
   [/motor error/, 'A servo reported a hardware error (overload?). If it repeats, power-cycle the hand.'],
   [/IMU is silent/, 'No IMU reading for 60 ms: check its cable.'],
   [/motors are silent/, 'No motor reading for 0.1 s: check the U2D2 and the power.'],
@@ -572,7 +572,7 @@ function render() {
   if (S.cur) S.cur.forEach((c, i) => {
     const el = $('bar' + i), a = Math.abs(c);
     if (!el) return;
-    el.style.height = `${Math.min(100, (100 * a) / 350)}%`;
+    el.style.height = `${Math.min(100, (100 * a) / 450)}%`;
     el.style.background = a > 300 ? 'var(--bad)' : a > 200 ? 'var(--warn)' : 'var(--ok)';
   });
   drawMap();

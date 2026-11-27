@@ -27,12 +27,12 @@ outputs/real/          policies/, logs/, imu/ (git-ignored)
 ## The bench
 
 - Right LEAP, 16 Dynamixel XC330-M288-T (IDs 0-15) on a U2D2 at 4 Mbps, its own power
-  supply. The motors run in current-based position mode with a **350 mA** limit (about
-  0.18 N·m): the as-built model's actuator cap.
+  supply. The motors run in current-based position mode with a **450 mA** limit (about
+  0.23 N·m; 350 mA, about 0.18 N·m, the as-built model's actuator cap, until 2026-11-27).
 - The TM171 on the back of the hand (`hardware/imu_mount/`), on USB, 400 readings a second,
   read in the palm's axes (the simulation's: x to the fingertips, y to the thumb, z up).
 - A Linux PC next to the hand runs the loop. The motors go through the driver in
-  `leap_hand/`: at every connect it sets the mode, the 350 mA, the gains (1200/0/600 by
+  `leap_hand/`: at every connect it sets the mode, the 450 mA, the gains (1200/0/600 by
   default), the joint limits and a 0.5 s watchdog, and it turns torque off on every way
   out. The loop runs in its own small Python, `real/.venv` (`real/setup`; `WL_PYTHON` to
   choose another one).
@@ -229,13 +229,15 @@ model is `panel/make_model.py`'s (re-run it if the hand's model changes; a test 
    `wlimu` before the loop opens the IMU.
 3. **It starts lying flat, palm down** (it refuses over 10°), the IMU plugged in for half
    a minute (it refuses under quality 4).
-4. **The 350 mA stays,** and so do the gains and the driver's settings.
+4. **The 450 mA stays** (`CURRENT_LIMIT_MA` in `wlc.py`, the rig file), and so do the gains
+   and the driver's settings.
 5. **A policy runs in the shadow first** (computed and logged, the clip is what's sent),
    then live, on a short clip first.
 
-It stops by itself: 40° of tilt; 15° between the IMU's "down" and the one the sim read for
-that frame; a motor error; the IMU or the motors silent; a motor at its current limit for
-1.5 s (it holds 0.3 s, then torque off); `touch real/STOP` or a motor over 60 °C (it lies
+It stops by itself: 70° of tilt; 25° between the IMU's "down" and the one the sim read for
+that frame, for 0.3 s; a motor error; the IMU or the motors silent; a motor over 430 mA for
+3 s (it holds 0.3 s, then torque off; the guards in `wlc.py`, loosened on 2026-11-27 from
+40°, 15° and 330 mA for 1.5 s so a policy can react before the loop gives up); `touch real/STOP` or a motor over 60 °C (it lies
 down first). Clips that follow each other must meet within 0.05 rad, checked before
 anything moves. Torque is off whenever it returns.
 
@@ -322,7 +324,7 @@ command runs clean too (0.021 rad in the shadow). None of this has been on the r
   then `lie_down`. Each key sends the velocity the student was trained with for that
   command (in the exported file: forward 28 mm/s, back 20, left 15, right 8, turns
   19 deg/s). No clip, so the guard comparing the IMU with the clip's "down" is off; the
-  others stay (40° of tilt, current, temperatures, silence, `real/STOP`). The export is
+  others stay (70° of tilt, current, temperatures, silence, `real/STOP`). The export is
   checked against rsl-rl's student, the steps on a fake hand (`tests/test_real_loop.py`).
 - **A walking policy** (`Walking-Leap-Flat-v*`, 57 inputs) doesn't run here: its inputs
   are not the student's. Train it on the real hand's model (`-Flat-v3`): the walking

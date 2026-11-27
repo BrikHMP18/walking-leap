@@ -484,13 +484,13 @@ class Session:
         with hand:
           meta = dict(
             when=time.strftime("%Y-%m-%d %H:%M:%S"), panel=True, mode=self.mode,
-            gains=self.gains, joint_names=wlc.JOINT_NAMES, current_limit_ma=350,
+            gains=self.gains, joint_names=wlc.JOINT_NAMES, current_limit_ma=wlc.CURRENT_LIMIT_MA,
             columns=dict(motor=wlc.Recorder.MOTOR, imu=wlc.Recorder.IMU, cmd=wlc.Recorder.CMD),
           )  # fmt: skip
           rec = wlc.Recorder(hand, imu, f"panel_{self.mode}", meta)
           rec.event = self._recorder_event(rec.event)
           ctl = wlc.Control(
-            hand, imu, rec, max_off=180.0 if self.mode == "fake" else 15.0
+            hand, imu, rec, max_off=180.0 if self.mode == "fake" else wlc.MAX_OFF
           )
           ctl.where, ctl.keep_policy = "lying", True
           ctl.policy, ctl.live = self.policy, self.live
