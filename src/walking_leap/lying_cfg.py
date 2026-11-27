@@ -417,6 +417,25 @@ def walking_leap_lying_low_v4_env_cfg(play: bool = False) -> ManagerBasedRlEnvCf
   return cfg
 
 
+def walking_leap_lying_goal_env_cfg(
+  play: bool = False, low: bool = True
+) -> ManagerBasedRlEnvCfg:
+  """``Walking-Leap-Lying-Flat-v3`` (``low=False``) and ``-Low-Flat-v5``: the far
+  costs on the policy's targets, not the motor model's setpoint. Lying-v2 at iteration
+  600, the loop's guard off on the twin, crawled (back 12.8 mm/s, turns 4.7 and 3.9
+  deg/s) with one motor at its limit the whole run; in training its setpoints never
+  strayed 0.1 rad from the joints (the motor model keeps them within its cap's reach),
+  so held_far and far_now could not see it. Fine-tuned from v2 / Low-v4 checkpoints."""
+  cfg = walking_leap_lying_v3_env_cfg(play=play, low=low)
+  cfg.rewards["held_far"].func = lm.held_far_goal
+  cfg.rewards["far_now"] = RewardTermCfg(
+    func=lm.far_goals,
+    weight=FAR_NOW_WEIGHT,
+    params={"error": FAR_ERROR, "span": FAR_SPAN},
+  )
+  return cfg
+
+
 def walking_leap_lying_v3_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
   """The lying learner with half the initial exploration noise (std 0.5)."""
   cfg = walking_leap_lying_ppo_runner_cfg()

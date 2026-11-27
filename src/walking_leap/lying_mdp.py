@@ -233,3 +233,27 @@ def far_setpoints(
   excess = ((data.joint_pos_target - data.joint_pos).abs() - error) / span
   excess = excess.clamp(0.0, 1.0)
   return excess.max(dim=-1).values if worst else excess.mean(dim=-1)
+
+
+def _goal_off(env: ManagerBasedRlEnv) -> torch.Tensor:
+  """|the policy's joint target - the joint| (rad), per motor. The real loop sends the
+  target as the driver's goal (moved at 5 rad/s); the motor model's setpoint
+  (``joint_pos_target``) stays within its torque cap's reach of the joint in training
+  (0.18 / 2.6 = 0.07 rad), so a target pressed far into the table never shows there."""
+  term = env.action_manager.get_term("joint_pos")
+  return (term._processed_actions - env.scene["robot"].data.joint_pos).abs()
+
+
+class held_far_goal(held_far):
+  """``held_far`` on the policy's targets (``_goal_off``)."""
+
+  def __call__(
+    self, env: ManagerBasedRlEnv, error: float, grace: float
+  ) -> torch.Tensor:
+    self.t = torch.where(_goal_off(env) > error, self.t + env.step_dt, 0.0)
+    return (self.t - grace).clamp(0.0, 1.0).max(dim=-1).values
+
+
+def far_goals(env: ManagerBasedRlEnv, error: float, span: float) -> torch.Tensor:
+  """``far_setpoints`` (worst motor) on the policy's targets (``_goal_off``)."""
+  return ((_goal_off(env) - error) / span).clamp(0.0, 1.0).max(dim=-1).values
