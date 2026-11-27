@@ -43,7 +43,7 @@ def gravity_in_palm(quat_wxyz: np.ndarray) -> np.ndarray:
   )
 
 
-def export_velocity(d: dict, out: str) -> int:
+def export_velocity(d: dict, out: str, command_range=None) -> int:
   """A velocity-command student (Walking-Leap-Motion-Gait-Flat-Student-v0): no clip, no
   reference; its history length and each keyboard command's velocity go in the file.
   Checked against the student as rsl-rl runs it (the checkpoint has no ONNX)."""
@@ -84,6 +84,7 @@ def export_velocity(d: dict, out: str) -> int:
       hi=[limits[n][1] for n in J],
       command_names=list(commands),
       command_values=np.array(list(commands.values())),
+      **({} if command_range is None else {"command_range": command_range}),
       **w,
     )
 
@@ -104,7 +105,9 @@ def export_velocity(d: dict, out: str) -> int:
       x = TensorDict({"student": torch.tensor(o, dtype=torch.float32)[None]}, [1])
       with torch.inference_mode():
         err.append(np.abs(student(x)[0].numpy() - P.net(o)).max())
-    print(f"normalizer eps {eps}: largest difference with rsl-rl's student {max(err):.1e}")
+    print(
+      f"normalizer eps {eps}: largest difference with rsl-rl's student {max(err):.1e}"
+    )
     if max(err) < 1e-4:
       break
   else:
@@ -112,7 +115,9 @@ def export_velocity(d: dict, out: str) -> int:
     os.remove(out)
     return 1
   speeds = ", ".join(
-    f"{k} {v[2] * 57.3:+.0f} deg/s" if v[2] else f"{k} {1e3 * np.abs(v[:2]).max():.0f} mm/s"
+    f"{k} {v[2] * 57.3:+.0f} deg/s"
+    if v[2]
+    else f"{k} {1e3 * np.abs(v[:2]).max():.0f} mm/s"
     for k, v in commands.items()
   )
   print(f"{out}: {n} inputs ({STUDENT_HISTORY} steps), velocity commands: {speeds}")
@@ -126,6 +131,11 @@ def main() -> int:
   ap.add_argument("--clip", help="motion policies: the loop's clip it plays along")
   ap.add_argument("--tracker", action="store_true", help="a tracker of several clips")
   ap.add_argument("--clips", nargs="+", help="--tracker: the clips it follows")
+  ap.add_argument(
+    "--command-range", type=float, nargs=6,
+    metavar=("FWD_MIN", "FWD_MAX", "LEFT_MIN", "LEFT_MAX", "TURN_MIN", "TURN_MAX"),
+    help="velocity students trained on ranges (m/s, m/s, rad/s): the panel's joystick",
+  )  # fmt: skip
   ap.add_argument("--onnx")
   ap.add_argument("--out")
   a = ap.parse_args()
@@ -135,7 +145,8 @@ def main() -> int:
 
   saved = torch.load(a.checkpoint, map_location="cpu", weights_only=False)
   if "student_state_dict" in saved:
-    return export_velocity(saved["student_state_dict"], out)
+    cr = None if a.command_range is None else np.reshape(a.command_range, (3, 2))
+    return export_velocity(saved["student_state_dict"], out, cr)
   if not (a.tracker and a.clips) and not (a.motion and a.clip):
     ap.error("a motion policy needs --motion and --clip (a tracker: --tracker --clips)")
   d = saved["actor_state_dict"]

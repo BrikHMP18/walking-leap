@@ -294,40 +294,127 @@ function covers(name) {
   const p = config.policies[S.policy];
   return !!(p && p.covers.includes(name));
 }
-// A velocity policy walks while a key is held: the page repeats the key (the server
-// stands the hand still when it stops hearing it), and releases it on keyup or blur.
+// A velocity policy walks while a key or the joystick is held: the page repeats what is
+// held (the server stands the hand still when it stops hearing it) and lets go on keyup,
+// blur or a hidden tab. Keys stack: the last one still held wins (W, then Q, then let go
+// of Q: forward again). A policy with a command range also takes the joystick (on screen
+// or a gamepad's left stick); its keys are then points of the stick.
+const NAMES = { forward: 'forward', back: 'back', left: 'left', right: 'right', turn_left: 'turn left',
+  turn_right: 'turn right', forward_left: 'curve left', forward_right: 'curve right' };
+const STICK_KEYS = { w: [0, 1], s: [0, -1], q: [-1, 1], e: [1, 1], a: [-1, 0], d: [1, 0] };
+const STICK_NAMES = { w: 'forward', s: 'back', q: 'curve left', e: 'curve right', a: 'turn left', d: 'turn right' };
 function velocity() {
   const p = config.policies[S.policy];
   return !!(p && p.kind === 'velocity');
 }
-let held = null, heldTimer = null;
-function walkSend(quiet, start) { return api('walk', { key: held, start: !!start }, quiet); }
+function joystick() {
+  const p = config.policies[S.policy];
+  return !!(p && p.kind === 'velocity' && p.range);
+}
+function stickVec(x, y, r) {  // as the server's stick_command, in mm/s and deg/s
+  return [y > 0 ? y * r[0][1] : -y * r[0][0], 0, x < 0 ? -x * r[2][1] : x * r[2][0]];
+}
+function vecText(v, short) {
+  if (!v) return '';
+  const f = Math.round(v[0] * 10) / 10, l = Math.round(v[1] * 10) / 10, t = Math.round(v[2] * 10) / 10;
+  const out = [];
+  if (f) out.push(short ? `${Math.abs(f)} mm/s` : `${f > 0 ? 'forward' : 'back'} ${Math.abs(f)} mm/s`);
+  if (l) out.push(short ? `${Math.abs(l)} mm/s` : `${l > 0 ? 'left' : 'right'} ${Math.abs(l)} mm/s`);
+  if (t) out.push(short ? `${Math.abs(t)}°/s` : `turning ${t > 0 ? 'left' : 'right'} ${Math.abs(t)}°/s`);
+  return out.length ? out.join(' · ') : 'standing still';
+}
+let keysHeld = [], stick = null, walkTimer = null;
+function walkHeld() { return stick !== null || keysHeld.length > 0; }
+function walkBody() {
+  if (stick) return { stick };
+  const k = keysHeld[keysHeld.length - 1];
+  if (!k) return { key: null };
+  return joystick() ? { stick: STICK_KEYS[k] } : { key: k };
+}
+function walkSend(quiet, start) { return api('walk', { ...walkBody(), start: !!start }, quiet); }
+function walkRefresh(start) {
+  if (walkHeld()) {
+    if (!walkTimer) walkTimer = setInterval(() => walkSend(true), 120);
+  } else {
+    clearInterval(walkTimer);
+    walkTimer = null;
+  }
+  return walkSend(!start, start);
+}
 async function hold(key) {
-  const p = config.policies[S.policy], cmd = config.walk[key];
-  if (!p || !cmd) return;
-  if (!p.commands[cmd]) return toast(`${S.policy} has no ${cmd.replace('_', ' ')}`, true);
-  if (held === key) return;
-  held = key;
-  clearInterval(heldTimer);
-  heldTimer = setInterval(() => walkSend(true), 150);
-  const j = await walkSend(false, true);
-  if (!j.ok && held === key) release(key);
+  const p = config.policies[S.policy];
+  if (!p || keysHeld.includes(key)) return;
+  if (!joystick() && !(p.keys || {})[key]) return toast(`${S.policy} has nothing on ${key.toUpperCase()}`, true);
+  keysHeld.push(key);
+  const j = await walkRefresh(true);
+  if (!j.ok) release(key);
 }
 function release(key) {
-  if (held === null || (key && held !== key)) return;
-  held = null;
-  clearInterval(heldTimer);
-  heldTimer = null;
-  walkSend(true);
+  if (key === undefined) {
+    if (!walkHeld()) return;
+    keysHeld = [];
+    stick = null;
+    showKnob(0, 0);
+  } else {
+    if (!keysHeld.includes(key)) return;
+    keysHeld = keysHeld.filter((k) => k !== key);
+  }
+  walkRefresh(false);
+}
+function showKnob(x, y) {
+  const k = document.querySelector('#stick .knob');
+  if (k) k.style.transform = `translate(calc(-50% + ${x * 44}px), calc(-50% + ${-y * 44}px))`;
+}
+function buildStick() {
+  const pad = $('stick');
+  let dragging = false;
+  const at = (e) => {
+    const r = pad.getBoundingClientRect();
+    let x = ((e.clientX - r.left) / r.width) * 2 - 1, y = 1 - ((e.clientY - r.top) / r.height) * 2;
+    const n = Math.hypot(x, y);
+    if (n > 1) { x /= n; y /= n; }
+    return [Math.round(x * 100) / 100, Math.round(y * 100) / 100];
+  };
+  pad.onpointerdown = async (e) => {
+    if (!joystick() || pad.classList.contains('off')) return;
+    dragging = true;
+    try { pad.setPointerCapture(e.pointerId); } catch (err) { /* a synthetic pointer */ }
+    stick = at(e);
+    showKnob(...stick);
+    const j = await walkRefresh(true);
+    if (!j.ok) { dragging = false; release(); }
+  };
+  pad.onpointermove = (e) => { if (dragging) { stick = at(e); showKnob(...stick); } };
+  pad.onpointerup = pad.onpointercancel = () => {
+    if (!dragging) return;
+    dragging = false;
+    stick = null;
+    showKnob(0, 0);
+    walkRefresh(false);
+  };
+}
+let padOn = false;
+function pollGamepad() {  // a gamepad's left stick: the joystick, with a dead zone
+  const g = (navigator.getGamepads ? [...navigator.getGamepads()] : []).find((x) => x && x.connected);
+  $('gamepad').hidden = !g;
+  const off = () => { if (padOn) { padOn = false; stick = null; showKnob(0, 0); walkRefresh(false); } };
+  if (!g || !joystick() || $('stick').classList.contains('off')) return off();
+  let x = g.axes[0] || 0, y = -(g.axes[1] || 0);
+  const n = Math.hypot(x, y), dz = 0.15;
+  if (n <= dz) return off();
+  const s = Math.min(1, (n - dz) / (1 - dz)) / n;
+  stick = [Math.round(x * s * 100) / 100, Math.round(y * s * 100) / 100];
+  showKnob(...stick);
+  if (!padOn) { padOn = true; walkRefresh(true); }
 }
 function buildSide() {
   const sel = $('policy');
   const all = Object.entries(config.policies);
-  const opt = ([n, p]) => `<option value="${n}">${n} · ${p.kind === 'velocity' ? 'hold the keys' : p.covers.length + ' clips'}${p.imu ? '' : ' · no IMU'}</option>`;
+  const opt = ([n, p]) => `<option value="${n}">${n} · ${p.kind === 'velocity' ? (p.range ? 'joystick' : 'hold the keys') : p.covers.length + ' clips'}${p.imu ? '' : ' · no IMU'}</option>`;
   const cycles = all.filter(([, p]) => p.kind !== 'velocity'), walking = all.filter(([, p]) => p.kind === 'velocity');
   sel.innerHTML = '<option value="">No policy · the scripts</option>'
     + (cycles.length ? `<optgroup label="Cycles · one clip per key or emote">${cycles.map(opt).join('')}</optgroup>` : '')
-    + (walking.length ? `<optgroup label="Walking · hold the keys">${walking.map(opt).join('')}</optgroup>` : '');
+    + (walking.length ? `<optgroup label="Walking · keys or joystick">${walking.map(opt).join('')}</optgroup>` : '');
   sel.onchange = () => api('policy', { name: sel.value || null, live: false });
   document.querySelectorAll('#seg-live button').forEach((b) => (b.onclick = async () => {
     const live = b.dataset.live === '1';
@@ -375,7 +462,7 @@ function render() {
   cc.classList.toggle('walk', !!S.walking);
   if (S.walking) {
     cc.hidden = false;
-    cc.textContent = `Walking · ${(S.walk_cmd || 'stand').replace('_', ' ')} · ${S.live ? 'LIVE' : 'shadow'}`;
+    cc.textContent = `Walking · ${vecText(S.walk_vec)} · ${S.live ? 'LIVE' : 'shadow'}`;
   }
   $('btn-connect').disabled = S.state !== 'off';
   $('btn-stand').disabled = !on || where !== 'lying' || moving;
@@ -386,21 +473,25 @@ function render() {
   const kind = !vp ? 'scripts' : walks ? 'walk' : 'cycles';
   $('policy-badge').textContent = { scripts: 'Scripts', cycles: 'Cycles', walk: 'Walking' }[kind];
   $('policy-badge').className = 'badge ' + kind;
-  $('move-badge').textContent = walks ? 'hold to walk' : '1 cycle per press';
+  const stickOn = walks && joystick();
+  $('move-badge').textContent = stickOn ? 'joystick or keys' : walks ? 'hold to walk' : '1 cycle per press';
   $('move-badge').className = 'badge ' + (walks ? 'walk' : vp ? 'cycles' : '');
   $('move-card').classList.toggle('walkmode', walks);
-  const speed = (v) => (v[2] ? `${Math.abs(v[2])}°/s` : `${Math.max(Math.abs(v[0]), Math.abs(v[1]))} mm/s`);
+  const top = keysHeld[keysHeld.length - 1];
   document.querySelectorAll('.key').forEach((b) => {
-    const name = config.moves[b.dataset.key], cmd = config.walk[b.dataset.key];
-    b.querySelector('small').textContent = walks && vp.commands[cmd] ? speed(vp.commands[cmd]) : b.dataset.label;
+    const key = b.dataset.key, name = config.moves[key];
     if (walks) {
-      const v = vp.commands[cmd];
+      const cmd = stickOn ? null : (vp.keys || {})[key];
+      const v = stickOn ? stickVec(...STICK_KEYS[key], vp.range) : vp.commands[cmd];
+      const label = stickOn ? STICK_NAMES[key] : NAMES[cmd] || '–';
+      b.querySelector('small').innerHTML = v ? `${label}<br>${vecText(v, true)}` : 'not in it';
       b.disabled = !standing || !v || (moving && !S.walking);
-      b.title = v ? `hold: ${cmd.replace('_', ' ')}, ${v[2] ? v[2] + '°/s' : Math.max(Math.abs(v[0]), Math.abs(v[1])) + ' mm/s'} (as trained)` : 'not in this policy';
+      b.title = v ? `hold: ${vecText(v)}${stickOn ? ' (a point of the joystick)' : ' (as trained)'}` : 'not in this policy';
       b.querySelector('i').className = v ? 'policy' : '';
-      b.classList.toggle('playing', S.walking && S.walk_cmd === cmd);
+      b.classList.toggle('playing', !!S.walking && top === key && !stick);
       return;
     }
+    b.querySelector('small').textContent = b.dataset.label;
     if (!name) { b.disabled = true; return; }
     b.disabled = !standing;
     b.title = b.dataset.clipTitle || '';
@@ -409,9 +500,12 @@ function render() {
   });
   $('move-sub').textContent = walks ? 'release: stand still' : 'W A S D · Q E';
   $('btn-walk-end').hidden = !S.walking;
-  if (held !== null) {  // its button got disabled under the finger: no pointerup will come
-    const hb = document.querySelector(`.key[data-key="${held}"]`);
-    if (hb && hb.disabled) release();
+  $('stick-wrap').hidden = !stickOn;
+  $('stick').classList.toggle('off', !standing || (moving && !S.walking));
+  $('stick').classList.toggle('active', !!stick);
+  $('stick-read').textContent = S.walking ? vecText(S.walk_vec) : stickOn ? 'drag to walk, let go to stand' : '';
+  if (keysHeld.some((k) => { const hb = document.querySelector(`.key[data-key="${k}"]`); return hb && hb.disabled; })) {
+    release();  // a held key's button got disabled under the finger: no pointerup will come
   }
   document.querySelectorAll('.emote').forEach((b) => {
     b.disabled = !standing;
@@ -425,7 +519,9 @@ function render() {
   $('policy-hint').innerHTML = !p
     ? 'Every clip plays as written (open loop).'
     : p.kind === 'velocity'
-      ? 'Walks while W A S D Q E is held, at the speeds it trained on; released, it stands still. Emotes play as written (the walk ends first).'
+      ? (p.range
+        ? `Walks with the joystick (drag it, or a gamepad's left stick): up and down ${vecText([p.range[0][1], 0, 0], true)} forward to ${vecText([p.range[0][0], 0, 0], true)} back, left and right up to ${vecText([0, 0, p.range[2][1]], true)} of turn. The keys are points of it. Let go: it stands still. Emotes play as written (the walk ends first).`
+        : 'Walks while a key is held, at the speeds it trained on (Q and E curve if it learned to); released, it stands still. Emotes play as written (the walk ends first).')
         + (S.live ? ' <b style="color:var(--warn)">Live: it walks.</b>' : ' Shadow: the hand holds its stance, the policy is computed and logged.')
       : `Drives (green dot): ${p.covers.map((n) => (config.clips[n] || {}).title || n).join(', ')}. The rest play as written.`
         + (S.live ? ' <b style="color:var(--warn)">Live: its targets go to the motors.</b>' : ' Shadow: computed and logged, the clip is sent.');
@@ -480,13 +576,15 @@ async function main() {
     if (e.key === 'Escape') { release(); api('stop'); return; }
     const k = e.key.toLowerCase();
     if (velocity()) {
-      if (config.walk[k]) { e.preventDefault(); if (!e.repeat) hold(k); }
+      if (config.walk.includes(k)) { e.preventDefault(); if (!e.repeat) hold(k); }
       else if (e.key === ' ') { e.preventDefault(); release(); }
       return;
     }
     if (!e.repeat && config.moves[k]) press(k);
   });
-  addEventListener('keyup', (e) => { if (held) release(e.key.toLowerCase()); });
+  addEventListener('keyup', (e) => { if (keysHeld.length) release(e.key.toLowerCase()); });
+  buildStick();
+  setInterval(pollGamepad, 50);
   addEventListener('blur', () => release());
   document.addEventListener('visibilitychange', () => { if (document.hidden) release(); });
   const first = await fetch('/api/state').then((r) => r.json());
