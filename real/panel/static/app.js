@@ -322,8 +322,12 @@ function release(key) {
 }
 function buildSide() {
   const sel = $('policy');
-  sel.innerHTML = '<option value="">No policy · the scripts</option>' + Object.entries(config.policies)
-    .map(([n, p]) => `<option value="${n}">${n} · ${p.kind === 'velocity' ? 'walks (hold the keys)' : p.covers.length + ' clips'}${p.imu ? '' : ' · no IMU'}</option>`).join('');
+  const all = Object.entries(config.policies);
+  const opt = ([n, p]) => `<option value="${n}">${n} · ${p.kind === 'velocity' ? 'hold the keys' : p.covers.length + ' clips'}${p.imu ? '' : ' · no IMU'}</option>`;
+  const cycles = all.filter(([, p]) => p.kind !== 'velocity'), walking = all.filter(([, p]) => p.kind === 'velocity');
+  sel.innerHTML = '<option value="">No policy · the scripts</option>'
+    + (cycles.length ? `<optgroup label="Cycles · one clip per key or emote">${cycles.map(opt).join('')}</optgroup>` : '')
+    + (walking.length ? `<optgroup label="Walking · hold the keys">${walking.map(opt).join('')}</optgroup>` : '');
   sel.onchange = () => api('policy', { name: sel.value || null, live: false });
   document.querySelectorAll('#seg-live button').forEach((b) => (b.onclick = async () => {
     const live = b.dataset.live === '1';
@@ -338,6 +342,7 @@ function buildSide() {
   }).join('');
   document.querySelectorAll('.emote').forEach((b) => (b.onclick = () => api('emote', { name: b.dataset.name })));
   document.querySelectorAll('.key').forEach((b) => {
+    b.dataset.label = b.querySelector('small').textContent;
     const clip = config.clips[config.moves[b.dataset.key]];
     if (!clip) { b.disabled = true; b.title = 'no clip'; return; }
     const t = clip.travel || [0, 0, 0];
@@ -367,6 +372,7 @@ function render() {
   const cc = $('chip-clip');
   cc.hidden = !moving;
   if (moving) cc.textContent = `${(config.clips[S.clip] || {}).title || S.clip}${S.policy_on ? (S.live ? ' · policy LIVE' : ' · policy shadow') : ''}`;
+  cc.classList.toggle('walk', !!S.walking);
   if (S.walking) {
     cc.hidden = false;
     cc.textContent = `Walking · ${(S.walk_cmd || 'stand').replace('_', ' ')} · ${S.live ? 'LIVE' : 'shadow'}`;
@@ -377,8 +383,16 @@ function render() {
   $('btn-end').disabled = !on;
   const standing = on && (where === 'stand' || where === 'moving');
   const walks = velocity(), vp = config.policies[S.policy];
+  const kind = !vp ? 'scripts' : walks ? 'walk' : 'cycles';
+  $('policy-badge').textContent = { scripts: 'Scripts', cycles: 'Cycles', walk: 'Walking' }[kind];
+  $('policy-badge').className = 'badge ' + kind;
+  $('move-badge').textContent = walks ? 'hold to walk' : '1 cycle per press';
+  $('move-badge').className = 'badge ' + (walks ? 'walk' : vp ? 'cycles' : '');
+  $('move-card').classList.toggle('walkmode', walks);
+  const speed = (v) => (v[2] ? `${Math.abs(v[2])}°/s` : `${Math.max(Math.abs(v[0]), Math.abs(v[1]))} mm/s`);
   document.querySelectorAll('.key').forEach((b) => {
     const name = config.moves[b.dataset.key], cmd = config.walk[b.dataset.key];
+    b.querySelector('small').textContent = walks && vp.commands[cmd] ? speed(vp.commands[cmd]) : b.dataset.label;
     if (walks) {
       const v = vp.commands[cmd];
       b.disabled = !standing || !v || (moving && !S.walking);
@@ -393,7 +407,7 @@ function render() {
     b.querySelector('i').className = covers(name) ? 'policy' : '';
     b.classList.toggle('playing', S.clip === name);
   });
-  $('move-sub').textContent = walks ? 'hold to walk · release: stand still' : 'W A S D · Q E';
+  $('move-sub').textContent = walks ? 'release: stand still' : 'W A S D · Q E';
   $('btn-walk-end').hidden = !S.walking;
   if (held !== null) {  // its button got disabled under the finger: no pointerup will come
     const hb = document.querySelector(`.key[data-key="${held}"]`);
