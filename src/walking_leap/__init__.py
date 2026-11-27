@@ -22,6 +22,12 @@ from walking_leap.env_cfg import (
   walking_leap_flat_omni_env_cfg,
   walking_leap_flat_real_env_cfg,
 )
+from walking_leap.lying_cfg import (
+  walking_leap_lying_env_cfg,
+  walking_leap_lying_ppo_runner_cfg,
+  walking_leap_lying_track_env_cfg,
+  walking_leap_lying_v1_env_cfg,
+)
 from walking_leap.motion_cfg import (
   walking_leap_clock_student_env_cfg,
   walking_leap_clock_student_v4_env_cfg,
@@ -321,4 +327,30 @@ register_mjlab_task(
   play_env_cfg=walking_leap_velocity_v8_env_cfg(play=True),
   rl_cfg=walking_leap_velocity_v3_ppo_runner_cfg(),
   runner_cls=ExploringStudentPpoRunner,
+)
+
+# Crawling lying down on joystick commands, rewards only (lying_cfg.py); Low keeps the
+# palm on or near the table.
+for _suffix, _low in (("", False), ("-Low", True)):
+  register_mjlab_task(
+    task_id=f"Walking-Leap-Lying{_suffix}-Flat-v0",
+    env_cfg=walking_leap_lying_env_cfg(low=_low),
+    play_env_cfg=walking_leap_lying_env_cfg(play=True, low=_low),
+    rl_cfg=walking_leap_lying_ppo_runner_cfg(),
+  )
+
+register_mjlab_task(
+  task_id="Walking-Leap-Lying-Low-Flat-v1",
+  env_cfg=walking_leap_lying_v1_env_cfg(),
+  play_env_cfg=walking_leap_lying_v1_env_cfg(play=True),
+  rl_cfg=walking_leap_lying_ppo_runner_cfg(),
+)
+
+# A tracker of the deep crawls (forward, back, turns), lying: the safe one.
+register_mjlab_task(
+  task_id="Walking-Leap-Lying-Track-Flat-v0",
+  env_cfg=walking_leap_lying_track_env_cfg(),
+  play_env_cfg=walking_leap_lying_track_env_cfg(play=True),
+  rl_cfg=walking_leap_crawl_ppo_runner_cfg(),
+  runner_cls=MotionTrackingOnPolicyRunner,
 )

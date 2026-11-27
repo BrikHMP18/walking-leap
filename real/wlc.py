@@ -301,6 +301,13 @@ class Steer:
   name, start, end, sha = "steer", "stand", "stand", "-"
 
 
+class SteerLying(Steer):
+  """``steer_lying``: a lying velocity policy (its file's ``start`` is "lying"), from
+  lying back to lying: the hand never stands."""
+
+  name, start, end = "steer_lying", "lying", "lying"
+
+
 # ---------------------------------------------------------------------------- the loop
 class Control:
   def __init__(self, hand, imu, rec, max_tilt=MAX_TILT, max_off=MAX_OFF, sat_s=SAT_S):
@@ -464,12 +471,14 @@ class Control:
   def steer(self, keys, stand):
     """A velocity policy walks as the keys say until they quit, then the hand stands
     still for a second and eases back to ``stand`` (the next clip's first targets). In
-    the shadow (not live) the stance is held while the policy is computed and logged."""
-    if self.where != "stand":
-      raise Abort(f"steering starts standing, the hand is {self.where}")
+    the shadow (not live) the stance is held while the policy is computed and logged.
+    A lying policy (``policy.start`` "lying") crawls from lying and ends lying."""
     policy, hold = self.policy, self.q.copy()
     if policy is None or policy.clip is not None:
       raise SystemExit("steer needs a velocity policy (--policy)")
+    where = getattr(policy, "start", "stand")
+    if self.where != where:
+      raise Abort(f"this policy steers from {where}, the hand is {self.where}")
     policy.reset()
     self.clip_no += 1
     self.where, name, t0, pol = "moving", "stand", time.monotonic(), []
@@ -494,7 +503,7 @@ class Control:
       f" the stance on average, worst {np.max(pol):.2f}"
     )
     self.ramp(stand, 0.3)
-    self.where = "stand"
+    self.where = where
 
 
 class Keys:
@@ -578,7 +587,8 @@ def run(
   start="lying",
 ):
   """Play clips one after the other, from lying. Torque is off when it returns."""
-  clips = [Steer() if n == "steer" else Clip(n) for n in names]
+  steps = {"steer": Steer, "steer_lying": SteerLying}
+  clips = [steps[n]() if n in steps else Clip(n) for n in names]
   for a, b in zip(clips, clips[1:]):
     if isinstance(a, Steer) or isinstance(b, Steer):
       continue  # steering starts where stand_up ends and eases back to what follows
@@ -642,6 +652,8 @@ def run(
         for i, c in enumerate(clips):
           if isinstance(c, Steer):
             after = clips[i + 1].q[0] if i + 1 < len(clips) else ctl.q
+            if isinstance(c, SteerLying) and i + 1 == len(clips):
+              after = policy.default  # back to the lying pose it crawled around
             with keys:
               ctl.steer(keys, after)
           else:
