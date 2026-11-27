@@ -226,3 +226,7 @@ turns +5.3/-4.1 deg/s, back -6.5, right -4.7; gets up from 100 %; still down aft
 32.2 mm/s, turns +5.2/-4.6 deg/s. **`brik_keys_v5b`** replaces `brik_keys_v5` for the
 demo (Hugging Face `runs/2026-11-27_11-12-30_Walking-Leap-Motion-Gait-Flat-Student-v5_s42/real/brik_keys_v5b.npz`,
 sha256 b68645a466a8...): the same steps, that file instead.
+
+A last 1000 iterations (model_3996) were mixed: back -7.8 and left turns +5.9 better,
+forward 28.0 and recovery after 1.0 m/s kicks (34 % still down) worse. `brik_keys_v5b`
+stays the demo policy.
