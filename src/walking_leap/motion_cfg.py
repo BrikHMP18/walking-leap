@@ -715,3 +715,14 @@ def walking_leap_velocity_v2_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg
   cfg = walking_leap_velocity_v1_env_cfg(play=play)
   cfg.rewards["track_lin_vel"].weight = 3.0
   return cfg
+
+
+def walking_leap_velocity_v3_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+  """Velocity-v2 with Gait-v1's light pushes (``PUSH_RANGE``, 0.1 m/s per axis) instead
+  of 0.4 m/s every 1-3 s: under those the hand walked at a seventh of what it is asked
+  (v2: forward 4.6 of 30 mm/s) and Gait-v2 slowed down too. A curriculum's first step:
+  walk fast, then push harder."""
+  cfg = walking_leap_velocity_v2_env_cfg(play=play)
+  if "push" in cfg.events:
+    cfg.events["push"].params["velocity_range"] = PUSH_RANGE
+  return cfg

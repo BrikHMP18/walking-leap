@@ -429,7 +429,7 @@ rsync -av <cluster>:<repository path>/logs/rsl_rl/ logs/rsl_rl/
 ## Tests
 
 ```sh
-uv run pytest                              # 159 tests: 26 robot/physics, 44 clips and environments, 89 real hand (recordings, loop, driver, panel, IMU reader)
+uv run pytest                              # 160 tests: 26 robot/physics, 44 clips and environments, 90 real hand (recordings, loop, driver, panel, IMU reader)
 CUDA_VISIBLE_DEVICES="" uv run pytest      # CPU only (~5 min)
 uv run ruff check src tests scripts && uv run ruff format --check src tests scripts
 uv run python scripts/render_media.py      # regenerate docs/media/

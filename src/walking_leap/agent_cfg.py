@@ -169,3 +169,10 @@ def walking_leap_velocity_v2_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
   """Velocity-v2: mjlab's PPO defaults again (learning rate 1e-3, adaptive) with the
   wider noise of ``runner.ExploringStudentPpoRunner``; also trains from scratch."""
   return replace(walking_leap_crawl_ppo_runner_cfg(), max_iterations=1_500)
+
+
+def walking_leap_velocity_v3_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+  """Velocity-v3: v2's learner with twice mjlab's entropy bonus (0.01), so that the
+  noise does not shrink back as v2's did (0.3 -> 0.12 in 300 iterations)."""
+  cfg = walking_leap_velocity_v2_ppo_runner_cfg()
+  return replace(cfg, algorithm=replace(cfg.algorithm, entropy_coef=0.01))
