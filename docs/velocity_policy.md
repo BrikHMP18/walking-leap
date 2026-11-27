@@ -189,3 +189,32 @@ a keyboard velocity policy on the panel: hold W to walk forward about 30 mm/s in
 simulation; it gets up by itself in simulation (the real loop stops at 40 deg of tilt).
 `brik_gait_v3` / `brik_gait_v4`: trackers of the six fast gait clips on the move keys.
 None of them has run on the real hand yet: shadow first, then live.
+
+### Where the night ended (2026-11-27, 06:30)
+
+| Policy (key held 8 s) | Forward (cmd ~27.6) | Turns (cmd +33 / -26 deg/s) | Back / left / right | Gets up | Kicks 0.5/0.75/1.0 m/s, still down |
+| --- | --- | --- | --- | --- | --- |
+| Gait-v5 (tracker of gait_smooth2, from Gait-v3) | 99 mm in 3 cycles | +38 / -36 deg in 3 cycles | as its clip | - | - |
+| Student-v5, model_999 (clock student of Gait-v5) | 27.9 (straight) | +5.9 / -3.2 | -4.8 / 3.0 / -3.9 | 100 % | 0/22/28 % |
+| **Student-v5, model_1998 (`brik_keys_v5`)** | **31.2** | +5.5 / -3.1 | -5.7 / 3.4 / -2.5 | **100 %** | **0/12/34 %** |
+| Velocity-v8 (PPO from Student-v5, gait_smooth2) | 27.1 | +5.5 / -3.1 | -0.7 / 1.0 / -1.5 | 94 % | 12/28/41 % |
+
+The clock runs at each key's own cycle (gait_smooth2's turns: 1.83 s left, 1.54 s
+right; the rest 1.02-1.08 s); with one 1.04 s period the turns were the same. The
+students turn well short of their teacher (+38 deg in three cycles is about 9 deg/s); PPO
+on top of a student never helped (Velocity-v6, v7, v8).
+
+**The demo policy: `brik_keys_v5`** (Student-v5, model_1998; Hugging Face
+`runs/2026-11-27_09-59-38_Walking-Leap-Motion-Gait-Flat-Student-v5_s42/real/brik_keys_v5.npz`,
+sha256 a219f38fc9d7...). Its numpy export, its own clock running, drives the simulated
+hand forward at 33.3 mm/s and turns it +5.9/-3.4 deg/s; it ran on the real loop with a
+fake hand and IMU (stand_up, steer, lie_down). On the hand's PC:
+
+```sh
+cd ~/walking-leap/repo && git pull
+wget -O outputs/real/policies/brik_keys_v5.npz \
+  https://huggingface.co/Autobrik/walking-leap/resolve/main/runs/2026-11-27_09-59-38_Walking-Leap-Motion-Gait-Flat-Student-v5_s42/real/brik_keys_v5.npz
+real/panel/run        # Connect, Stand up, Policy: brik_keys_v5, Shadow, then Live; hold W A S D Q E
+```
+
+In simulation: `uv run python scripts/steer_student.py outputs/hf/runs/2026-11-27_09-59-38_Walking-Leap-Motion-Gait-Flat-Student-v5_s42 --checkpoint model_1998.pt --fallen`.

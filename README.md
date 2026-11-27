@@ -57,8 +57,13 @@ the real hand and what to train next).
   Outside training it goes forward as planned but falls short on the other commands, as
   its clip does; Gait-v1 is no better and gets up from 3 % of falls (PLAN.md). The
   planner's targets also jumped faster than the real loop allows, now fixed
-  (`gait.SMOOTH_IK`). Next: a keyboard-velocity policy that walks fast, takes pushes and
-  gets up, [docs/velocity_policy.md](docs/velocity_policy.md).
+  (`gait.SMOOTH_IK`).
+- **A keyboard-velocity policy** ([docs/velocity_policy.md](docs/velocity_policy.md)):
+  teachers that track the smooth clip (Gait-v3/v5) and get up (Getup-v0), distilled into
+  a student that sees only the command, a gait clock, the IMU and the encoders. With a
+  key held in simulation, `brik_keys_v5` (Student-v5) walks forward about 31 mm/s, turns
+  3-6 deg/s, gets up from every fall tried and is rarely left down by kicks. Not run on
+  the real hand yet.
 
 What the next training batch should change, from all of it:
 [docs/next_training.md](docs/next_training.md). See [PLAN.md](PLAN.md).
