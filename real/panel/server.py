@@ -494,7 +494,11 @@ def catalog(policies):
       clips[name] = dict(title=title, seconds=round(len(c.q) / wlc.HZ, 1), note=c.meta.get("note", ""), travel=travel)  # fmt: skip
   pols = {}
   for name, path in policies.items():
-    kind = policy_kind(path)
+    try:
+      kind = policy_kind(path)
+    except Exception as e:  # noqa: BLE001 - a broken or half-copied file: skip it
+      print(f"{name}: not read ({type(e).__name__}: {e})")
+      continue
     if kind == "velocity":  # walks on the keys: each command's velocity, mm/s and deg/s
       p = VelocityPolicy(path)
       pols[name] = dict(
@@ -546,8 +550,10 @@ def handler(session, info):
 
     def do_GET(self):
       path = self.path.split("?")[0]
-      if path == "/api/config":
-        return self.send(200, dict(info, policies=info["policies"]))
+      if path == "/api/config":  # the policies folder is read again at every page load
+        fresh = find_policies()
+        session.policies = fresh
+        return self.send(200, dict(info, policies=catalog(fresh)["policies"]))
       if path == "/api/state":
         return self.send(200, dict(session.status(), events=session.events_after(0)))
       if path == "/api/stream":

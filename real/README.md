@@ -123,9 +123,9 @@ the real hand.
    It refuses to keep the file if the numpy copy differs from the ONNX.
 2. **Copy the file** into `outputs/real/policies/` of the repo's clone on the hand's PC:
    `scp outputs/real/policies/<name>.npz <hand PC>:<the clone>/outputs/real/policies/`.
-3. **Restart the panel** there (Ctrl-C, then `real/panel/run`): it reads that folder when
-   it starts. To try it without the hand first: `real/panel/run --fake`, or `--twin`
-   anywhere the repo runs.
+3. **Reload the page:** the panel reads that folder again at every page load (a file it
+   can't read is skipped, and its log says why). To try it without the hand first:
+   `real/panel/run --fake`, or `--twin` anywhere the repo runs.
 4. **Pick it in the dropdown.** The green dots show the moves and emotes it drives (the
    clips it was trained on, by name); the others play as written. Shadow first, then
    Live, with Mathias there.
