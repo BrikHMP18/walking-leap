@@ -102,6 +102,9 @@ def main() -> None:
   parser.add_argument(
     "--smooth", action="store_true", help="plan with gait.SMOOTH_IK (gait_smooth.npz)"
   )
+  parser.add_argument(
+    "--fast-turns", action="store_true", help="gait.FAST_TURN_COMMANDS (gait_smooth2)"
+  )
   args = parser.parse_args()
 
   hand = clips.RealHand()
@@ -122,7 +125,8 @@ def main() -> None:
     f"{args.hands} random hands: standing, fwd mm, left mm, turn deg | fastest joint"
   )
   for name, commands in sequences.items():
-    keys, velocity, phase = gait.plan(crawler, commands, with_phase=True)
+    table = gait.FAST_TURN_COMMANDS if args.fast_turns else None
+    keys, velocity, phase = gait.plan(crawler, commands, with_phase=True, table=table)
     motion = clips.replay(f"gait_{name}", hand, q=keys)
     # The planned velocity too: a velocity student reads it as its command.
     clips.save(
