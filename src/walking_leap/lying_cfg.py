@@ -360,6 +360,32 @@ def walking_leap_lying_v1_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   return cfg
 
 
+# v1 (Lying) and Low-v2, after Low-v1's design: v0 at iteration 700, told to stand still on
+# the twin, still pressed the middle finger and the thumb into the table and squeezed
+# the side-to-side knuckles together, four motors at their limit for 1.5 s (the loop
+# stops). Training's force-based terms hardly fire there (its contact is softer), so the
+# setpoints far from the joints are charged too (held_far), on top of Low-v1's fixes.
+FAR_ERROR = 0.11  # rad: the twin's servo (1.6 N*m/rad) is at its 0.18 N*m cap beyond it
+FAR_GRACE = 0.5  # s
+FAR_WEIGHT = -4.0
+
+
+def walking_leap_lying_v2_env_cfg(
+  play: bool = False, low: bool = True
+) -> ManagerBasedRlEnvCfg:
+  """``Walking-Leap-Lying-Flat-v1`` (``low=False``: no palm cost) and
+  ``Walking-Leap-Lying-Low-Flat-v2``: Low-v1 with ``held_far``."""
+  cfg = walking_leap_lying_v1_env_cfg(play=play)
+  if not low:
+    del cfg.rewards["palm_above"]
+  cfg.rewards["held_far"] = RewardTermCfg(
+    func=lm.held_far,
+    weight=FAR_WEIGHT,
+    params={"error": FAR_ERROR, "grace": FAR_GRACE},
+  )
+  return cfg
+
+
 def walking_leap_lying_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
   """Flat-v3's learner (the student's network, so the export reads it), its own
   experiment folder."""

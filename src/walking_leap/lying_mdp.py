@@ -193,3 +193,28 @@ def stood_up_level(
   g = asset.data.projected_gravity_b
   tilt = torch.rad2deg(torch.acos((-g[:, 2]).clamp(-1.0, 1.0)))
   return ((z > height) & (tilt < level_deg)) | (z > high)
+
+
+class held_far:
+  """Each motor's time with its setpoint more than ``error`` rad from its joint, beyond
+  ``grace`` s, up to 1 s; the worst motor counts (0 to 1). The real loop's guard reads
+  the current, which a far setpoint drives to the limit (the twin's 1.6 N*m/rad saturates
+  at 0.11 rad); this reads the positions, whatever the contacts' softness: Lying v0 held
+  four motors pressed into the table or each other on the twin, at their limit, while
+  training's softer contact barely saturated them. Negative weight."""
+
+  def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRlEnv):
+    del cfg
+    self.asset: Entity = env.scene["robot"]
+    self.t = torch.zeros_like(self.asset.data.joint_pos)
+
+  def reset(self, env_ids: torch.Tensor | slice | None = None) -> None:
+    self.t[slice(None) if env_ids is None else env_ids] = 0.0
+
+  def __call__(
+    self, env: ManagerBasedRlEnv, error: float, grace: float
+  ) -> torch.Tensor:
+    data = self.asset.data
+    far = (data.joint_pos_target - data.joint_pos).abs() > error
+    self.t = torch.where(far, self.t + env.step_dt, 0.0)
+    return (self.t - grace).clamp(0.0, 1.0).max(dim=-1).values
