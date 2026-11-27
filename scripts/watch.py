@@ -29,6 +29,7 @@ DOES = {
   "Walking-Leap-Motion-Gait-Flat-v0": "imitates the scripted crawl",
   "Walking-Leap-Motion-Gait-Flat-v1": "scripted crawl, randomized, falls",
   "Walking-Leap-Motion-Gait-Flat-v2": "smooth scripted crawl, strong pushes",
+  "Walking-Leap-Motion-Gait-Flat-v3": "smooth scripted crawl, light pushes",
   "Walking-Leap-Motion-Gait-Flat-Getup-v0": "gets up from a fall",
   "Walking-Leap-Motion-Gait-Flat-Student-v1": "keyboard velocity, gets up, takes pushes",
   "Walking-Leap-Motion-Gait-Flat-Velocity-v0": "keyboard velocity (RL), gets up, pushes",
@@ -36,6 +37,7 @@ DOES = {
   "Walking-Leap-Motion-Gait-Flat-Velocity-v2": "keyboard velocity (RL, explores more)",
   "Walking-Leap-Motion-Gait-Flat-Velocity-v3": "keyboard velocity (RL, light pushes)",
   "Walking-Leap-Motion-Gait-Flat-Velocity-v4": "keyboard velocity (RL, clean world)",
+  "Walking-Leap-Motion-Gait-Flat-Velocity-v5": "keyboard velocity, imitating the clip",
 }
 
 

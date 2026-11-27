@@ -496,6 +496,16 @@ def walking_leap_gait_v2_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   )
 
 
+def walking_leap_gait_v3_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+  """Gait-v2 with Gait-v1's light pushes (0.1 m/s per axis): the first step of a
+  curriculum. Under 0.4 m/s pushes Gait-v2 walked about 15 mm a cycle against its
+  clip's 29, and the velocity policies distilled from it barely translated. Same
+  observations: continues from Gait-v1, which tracked its clip best."""
+  return walking_leap_gait_env_cfg(
+    play=play, clip="gait_smooth", fallen_start_prob=0.0, slew=True
+  )
+
+
 GETUP_EPISODE_S = 6.0
 
 
@@ -737,4 +747,27 @@ def walking_leap_velocity_v4_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg
   for name in list(cfg.events):
     del cfg.events[name]
   cfg.observations["actor"].enable_corruption = False
+  return cfg
+
+
+def walking_leap_velocity_v5_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+  """The keyboard policy taught by imitation: the two-teacher student's world (the
+  clip's planned velocity is the command; the actor never sees the clip) trained with
+  PPO on the clip's own rewards (the palm's path and orientation, the digits' poses and
+  velocities, the planned velocity), plus being up. Following the palm's path makes the
+  hand move as the clip moves for each command: Velocity-v0..v4, rewarded on velocity
+  alone, barely translated. Light pushes (Gait-v1's), 30 % fallen starts, the driver's
+  limit. Same actor as the velocity tasks: continues from them."""
+  cfg = walking_leap_two_teacher_student_env_cfg(play=play)
+  critic = walking_leap_gait_env_cfg(
+    play=play, clip="gait_smooth", slew=True
+  ).observations["critic"]
+  critic.terms["command"] = replace(cfg.observations["student"].terms["command"])
+  critic.terms["fallen"] = replace(cfg.observations["fallen"].terms["fallen"])
+  cfg.observations = {"actor": cfg.observations["student"], "critic": critic}
+  if "push" in cfg.events:
+    cfg.events["push"].params["velocity_range"] = PUSH_RANGE
+  cfg.rewards["up"] = RewardTermCfg(
+    func=mdp.not_fallen, weight=1.0, params={"command_name": "motion"}
+  )
   return cfg

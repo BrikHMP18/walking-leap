@@ -138,3 +138,10 @@ Velocity-v3 (Gait-v1's 0.1 m/s pushes, entropy 0.01) and Velocity-v4 (a diagnosi
 pushes, cables, random physics or sensor noise, as Walking-Leap-Flat-v3 trained, the one
 policy that walked about 20 of 30 mm/s) both continue from Velocity-v2's model_2300.
 Comparing them tells whether the perturbations held the walking back.
+
+Velocity-v3 at model_2700 still barely translated (forward 5.2 of 30 mm/s) and the user,
+watching it, called it: no progress. All runs stopped. Two followed: Velocity-v5, the
+last velocity checkpoint (v3 model_2800) taught by imitation (the command is the clip's
+planned velocity, the rewards are the clip's: following the palm's path makes it
+translate as the clip does), and Gait-v3, a safe fallback (the smooth clip tracked with
+Gait-v1's light pushes, from Gait-v1) for the panel's gait_forward emote.

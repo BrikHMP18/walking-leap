@@ -457,6 +457,15 @@ def test_keyboard_velocity_tasks_fit_together():
     velocity.observations["actor"].terms
   )  # v4 continues from v2
   assert not velocity_v4.events  # the clean world: no perturbation
+  velocity_v5 = load_env_cfg("Walking-Leap-Motion-Gait-Flat-Velocity-v5")
+  assert list(velocity_v5.observations["actor"].terms) == list(
+    velocity.observations["actor"].terms
+  )  # v5's actor is the velocity policies' (it continues from them)
+  assert {"palm_position", "body_position", "up"} <= set(velocity_v5.rewards)
+  gait_v3 = load_env_cfg("Walking-Leap-Motion-Gait-Flat-v3")
+  assert list(gait_v3.observations["actor"].terms) == list(
+    v1.observations["actor"].terms
+  )
   actor = list(v1.observations["actor"].terms)
   assert list(v2.observations["actor"].terms) == actor
   assert list(student.observations["teacher"].terms) == actor

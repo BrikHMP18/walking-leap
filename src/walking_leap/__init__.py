@@ -26,6 +26,7 @@ from walking_leap.motion_cfg import (
   walking_leap_gait_env_cfg,
   walking_leap_gait_student_env_cfg,
   walking_leap_gait_v2_env_cfg,
+  walking_leap_gait_v3_env_cfg,
   walking_leap_getup_env_cfg,
   walking_leap_motion_env_cfg,
   walking_leap_two_teacher_student_env_cfg,
@@ -34,6 +35,7 @@ from walking_leap.motion_cfg import (
   walking_leap_velocity_v2_env_cfg,
   walking_leap_velocity_v3_env_cfg,
   walking_leap_velocity_v4_env_cfg,
+  walking_leap_velocity_v5_env_cfg,
 )
 from walking_leap.robot import MEASURED_STIFFNESS, TORSION
 from walking_leap.runner import (
@@ -205,6 +207,27 @@ register_mjlab_task(
   task_id="Walking-Leap-Motion-Gait-Flat-Velocity-v4",
   env_cfg=walking_leap_velocity_v4_env_cfg(),
   play_env_cfg=walking_leap_velocity_v4_env_cfg(play=True),
+  rl_cfg=walking_leap_velocity_v3_ppo_runner_cfg(),
+  runner_cls=ExploringStudentPpoRunner,
+)
+
+# Curriculum, step one: Gait-v2 with light pushes (Gait-v1's), on the smooth clip and
+# the driver's limit; continues from Gait-v1. Velocity-v0..v4 barely translated.
+register_mjlab_task(
+  task_id="Walking-Leap-Motion-Gait-Flat-v3",
+  env_cfg=walking_leap_gait_v3_env_cfg(),
+  play_env_cfg=walking_leap_gait_v3_env_cfg(play=True),
+  rl_cfg=walking_leap_crawl_ppo_runner_cfg(),
+  runner_cls=MotionTrackingOnPolicyRunner,
+)
+
+# The keyboard policy taught by imitation: the command is the clip's planned velocity,
+# the rewards are the clip's (palm path, digits' poses); continues from the velocity
+# policies (it keeps getting up and turning, and learns to translate as the clip does).
+register_mjlab_task(
+  task_id="Walking-Leap-Motion-Gait-Flat-Velocity-v5",
+  env_cfg=walking_leap_velocity_v5_env_cfg(),
+  play_env_cfg=walking_leap_velocity_v5_env_cfg(play=True),
   rl_cfg=walking_leap_velocity_v3_ppo_runner_cfg(),
   runner_cls=ExploringStudentPpoRunner,
 )

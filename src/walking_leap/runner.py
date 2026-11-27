@@ -117,7 +117,12 @@ class ExploringStudentPpoRunner(StudentPpoRunner):
 
   def load(self, path, load_cfg=None, strict=True, map_location=None) -> dict:
     # A PPO checkpoint (continuing Velocity-v1) loads as usual, then gets the wider noise.
-    infos = super().load(path, load_cfg, strict, map_location)
+    # From a task whose critic sees other inputs (Velocity-v5's sees the clip): the actor
+    # only, the critic fresh.
+    try:
+      infos = super().load(path, load_cfg, strict, map_location)
+    except RuntimeError:
+      infos = super().load(path, {"actor": True}, strict, map_location)
     with torch.no_grad():
       for name, p in self.alg.actor.named_parameters():
         if name.endswith("std_param"):
