@@ -30,6 +30,8 @@ DOES = {
   "Walking-Leap-Motion-Gait-Flat-v1": "scripted crawl, randomized, falls",
   "Walking-Leap-Motion-Gait-Flat-v2": "smooth scripted crawl, strong pushes",
   "Walking-Leap-Motion-Gait-Flat-v3": "smooth scripted crawl, light pushes",
+  "Walking-Leap-Motion-Gait-Flat-v4": "smooth scripted crawl, moderate pushes",
+  "Walking-Leap-Motion-Gait-Flat-Student-v2": "keyboard velocity, student of Gait-v3",
   "Walking-Leap-Motion-Gait-Flat-Getup-v0": "gets up from a fall",
   "Walking-Leap-Motion-Gait-Flat-Student-v1": "keyboard velocity, gets up, takes pushes",
   "Walking-Leap-Motion-Gait-Flat-Velocity-v0": "keyboard velocity (RL), gets up, pushes",
@@ -91,6 +93,9 @@ def main() -> None:
   parser.add_argument("--checkpoint", default=None)
   parser.add_argument("--fallen", action="store_true", help="every reset starts fallen")
   parser.add_argument(
+    "--motion", type=Path, default=None, help="another clip for a tracking policy"
+  )
+  parser.add_argument(
     "--device", default="cuda:0" if torch.cuda.is_available() else "cpu"
   )
   args = parser.parse_args()
@@ -99,9 +104,13 @@ def main() -> None:
   cfg.scene.num_envs = 1
   if args.fallen:
     cfg.commands["motion"].fallen_start_prob = 1.0
+  if args.motion is not None:
+    cfg.commands["motion"].motion_file = str(args.motion)
   env = RslRlVecEnvWrapper(ManagerBasedRlEnv(cfg=cfg, device=args.device))
   actor = load_policy(env, policy, args.device)
   title, subtitle = label(policy.task, args.run, policy.checkpoint)
+  if args.motion is not None:
+    subtitle += f" / clip {args.motion.stem}"
   print(f"[watch] {title} ({subtitle})", flush=True)
   LabeledViewer(env, actor, title, subtitle).run()
   env.close()

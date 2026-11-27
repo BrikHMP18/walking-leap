@@ -771,3 +771,31 @@ def walking_leap_velocity_v5_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg
     func=mdp.not_fallen, weight=1.0, params={"command_name": "motion"}
   )
   return cfg
+
+
+# Curriculum, step two: pushes between Gait-v1's (0.1 m/s) and Gait-v2's (0.4 m/s).
+MODERATE_PUSH_RANGE = {**PUSH_RANGE, "x": (-0.25, 0.25), "y": (-0.25, 0.25)}
+
+
+def walking_leap_gait_v4_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+  """Gait-v3 with moderate pushes (0.25 m/s per axis): Gait-v3 tracks the smooth clip
+  at its planned speed (forward 93 of 90 mm in three cycles); now take harder pushes
+  without losing it. Continues from Gait-v3."""
+  return walking_leap_gait_env_cfg(
+    play=play,
+    clip="gait_smooth",
+    fallen_start_prob=0.0,
+    push=MODERATE_PUSH_RANGE,
+    slew=True,
+  )
+
+
+def walking_leap_two_teacher_student_v2_env_cfg(
+  play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+  """Student-v1's world with light pushes (Gait-v1's), for a student of Gait-v3 (which
+  walks at the clip's speed; Student-v1's teacher, Gait-v2, walked at half) and Getup."""
+  cfg = walking_leap_two_teacher_student_env_cfg(play=play)
+  if "push" in cfg.events:
+    cfg.events["push"].params["velocity_range"] = PUSH_RANGE
+  return cfg
