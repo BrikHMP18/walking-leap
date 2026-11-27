@@ -72,7 +72,10 @@ def main() -> None:
         period = periods.get(state["name"], 1.04)
         ticks["phase"] = (ticks["phase"] + env.step_dt / period) % 1.0
       fallen = env.command_manager.get_term("motion").fallen[:, None]
-      clock = torch.tensor([np.sin(angle), np.cos(angle)], device=env.device)
+      # float32: numpy's float64 scalars would make the whole observation float64.
+      clock = torch.tensor(
+        [np.sin(angle), np.cos(angle)], dtype=torch.float32, device=env.device
+      )
       still = torch.tensor([0.0, 1.0], device=env.device)
       return torch.where(fallen, still, clock.expand(env.num_envs, 2))
 
