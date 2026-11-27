@@ -408,6 +408,15 @@ def walking_leap_lying_v3_env_cfg(
   return cfg
 
 
+def walking_leap_lying_low_v4_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+  """``Walking-Leap-Lying-Low-Flat-v4``: Low-v3 with the far setpoints charged on the
+  worst motor (Lying-v2 at iteration 100 still held the middle finger's knuckle pressed
+  into the table on the twin; averaged over 16 motors that cost about 0.2 a second)."""
+  cfg = walking_leap_lying_v3_env_cfg(play=play, low=True)
+  cfg.rewards["far_now"].params["worst"] = True
+  return cfg
+
+
 def walking_leap_lying_v3_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
   """The lying learner with half the initial exploration noise (std 0.5)."""
   cfg = walking_leap_lying_ppo_runner_cfg()

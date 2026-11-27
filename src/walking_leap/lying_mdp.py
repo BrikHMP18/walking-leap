@@ -220,11 +220,16 @@ class held_far:
     return (self.t - grace).clamp(0.0, 1.0).max(dim=-1).values
 
 
-def far_setpoints(env: ManagerBasedRlEnv, error: float, span: float) -> torch.Tensor:
+def far_setpoints(
+  env: ManagerBasedRlEnv, error: float, span: float, worst: bool = False
+) -> torch.Tensor:
   """Now, the motors' setpoints beyond ``error`` rad from their joints: each one's excess
   over ``span``, capped at 1, averaged over the motors (0 to 1). ``held_far`` alone never
   fired in training: the exploration noise keeps any setpoint from staying far for long,
-  while the deployed policy (its mean) holds it there. Negative weight."""
+  while the deployed policy (its mean) holds it there. ``worst``: the worst motor's
+  instead of the average (one motor pressing into the table is what stops the loop).
+  Negative weight."""
   data = env.scene["robot"].data
-  excess = (data.joint_pos_target - data.joint_pos).abs() - error
-  return (excess / span).clamp(0.0, 1.0).mean(dim=-1)
+  excess = ((data.joint_pos_target - data.joint_pos).abs() - error) / span
+  excess = excess.clamp(0.0, 1.0)
+  return excess.max(dim=-1).values if worst else excess.mean(dim=-1)
