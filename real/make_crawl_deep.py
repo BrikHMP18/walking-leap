@@ -35,12 +35,14 @@ I = {n: i for i, n in enumerate(J)}  # noqa: E741
 HZ = wlc.HZ
 FINGERS = ("if", "mf", "rf")
 # The strokes, rad for the joints, s for the times, picked on the twin (open loop, 4 hands:
-# tips' grip 0.4-0.6, palm 0.5-1.0, servos 1.6-3.0; every joint under 3 rad/s). Forward:
-# ring and middle stroke, the index lies, the folded thumb presses down (all three
-# curve it right, the thumb dragging on the left). Back: plant curled and push out (pushing
-# moves the palm more than pulling). Turns: the tips planted and swept sideways.
+# tips' grip 0.4-0.6, palm 0.2-1.0, servos 1.6-3.0; every joint under 3 rad/s). Forward:
+# all three stroke, the index's 1.26 times the ring's, the folded thumb pressing a little;
+# it curves right (the thumb dragging on the left, a guess). Its knuckles end the pull at
+# 0.4 rad: pressed harder (0.69) the hand pitched to 40 deg, the real loop's tilt guard.
+# Back: plant curled and push out (pushing moves the palm more than pulling). Turns: the
+# tips planted and swept sideways.
 FORWARD = dict(
-  lift=-0.205, reach_pip=-0.341, plant=(0.542, -0.06, 0.363), pull=(0.685, 0.926, 0.918),
+  lift=-0.205, reach_pip=-0.341, plant=(0.45, -0.06, 0.363), pull=(0.4, 0.7, 0.918),
   t_lift=0.885, t_reach=0.607, t_plant=0.945, t_pull=1.488, stagger=0.072, bias=-0.262,
   thumb=(0.255, 0.028), cycles=4,
 )  # fmt: skip
