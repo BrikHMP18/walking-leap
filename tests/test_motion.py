@@ -261,16 +261,17 @@ def test_gait_commands_move_the_plan(crawler, name):
   assert abs(turned - turn) < np.radians(2.0)
 
 
-@pytest.mark.parametrize("name", ["gait", "gait_smooth"])
+@pytest.mark.parametrize("name", ["gait", "gait_smooth", "gait_smooth2"])
 def test_gait_file_is_up_to_date(name):
   """assets/clips/gait.npz (and gait_smooth.npz, planned with gait.SMOOTH_IK) is
   gait.py's crawl replayed on the real hand's model, and the hand stays up for all of
   it. The smooth one's targets stay under the real loop's 6 rad/s."""
   hand = clips.RealHand()
-  smooth = gait.SMOOTH_IK if name == "gait_smooth" else 0.0
+  smooth = gait.SMOOTH_IK if name.startswith("gait_smooth") else 0.0
+  table = gait.FAST_TURN_COMMANDS if name == "gait_smooth2" else None  # larger turns
   if smooth:
     targets, velocity, phase = gait.training_targets(
-      hand.model, smooth, with_phase=True
+      hand.model, smooth, with_phase=True, table=table
     )
   else:
     targets, velocity = gait.training_targets(hand.model)

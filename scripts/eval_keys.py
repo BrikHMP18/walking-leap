@@ -22,7 +22,7 @@ from mjlab.envs import ManagerBasedRlEnv
 from mjlab.rl import RslRlVecEnvWrapper
 from mjlab.tasks.registry import load_env_cfg
 
-from walking_leap.clips import gait_command_velocities, gait_cycle_s
+from walking_leap.clips import gait_command_velocities, gait_cycle_s, trained_clip
 
 ROOT = Path(__file__).parents[1]
 HANDS, STAND_S, HOLD_S = 8, 2.0, 8.0
@@ -68,7 +68,8 @@ def hold(policy, key: str, device: str) -> dict:
     round(STAND_S / env.unwrapped.step_dt),
     round((STAND_S + HOLD_S) / env.unwrapped.step_dt),
   )
-  velocity = gait_command_velocities()[key]
+  clip = trained_clip(policy.checkpoint.parent)
+  velocity = gait_command_velocities(clip if clip.startswith("gait") else "gait")[key]
   with torch.inference_mode():
     for k in range(steps):
       if k == stand:

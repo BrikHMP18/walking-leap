@@ -846,3 +846,20 @@ def walking_leap_velocity_v7_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg
   cfg = walking_leap_velocity_v6_env_cfg(play=play)
   cfg.rewards["planned_velocity"].weight = 3.0
   return cfg
+
+
+def walking_leap_gait_v5_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+  """Gait-v3 on gait_smooth2.npz (turns planned 60 deg left and 40 deg right a cycle:
+  the replay turns about twice as far as gait_smooth's). Continues from Gait-v3."""
+  return walking_leap_gait_env_cfg(
+    play=play, clip="gait_smooth2", fallen_start_prob=0.0, slew=True
+  )
+
+
+def walking_leap_clock_student_v5_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+  """Student-v3 on gait_smooth2.npz: the clock student of Gait-v5 (larger turns) and
+  Getup. Its keys' velocities come from that clip (clips.gait_command_velocities)."""
+  cfg = walking_leap_clock_student_env_cfg(play=play)
+  old = cfg.commands["motion"]
+  old.motion_file = str(CLIPS_DIR / "gait_smooth2.npz")
+  return cfg

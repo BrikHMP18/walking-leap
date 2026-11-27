@@ -102,7 +102,9 @@ def trained_command_range(run_dir: str) -> np.ndarray | None:
   return np.array([r["lin_vel_x"], r["lin_vel_y"], r["ang_vel_z"]], float)
 
 
-def export_velocity(d: dict, out: str, command_range=None, source: str = "{}") -> int:
+def export_velocity(
+  d: dict, out: str, command_range=None, source: str = "{}", checkpoint: str = ""
+) -> int:
   """A velocity-command student (Walking-Leap-Motion-Gait-Flat-Student-v0): no clip, no
   reference; its history length and each keyboard command's velocity go in the file.
   Checked against the student as rsl-rl runs it (the checkpoint has no ONNX)."""
@@ -124,7 +126,11 @@ def export_velocity(d: dict, out: str, command_range=None, source: str = "{}") -
   stance = [
     next(v for k, v in robot.FOLDED_JOINT_POS.items() if re.fullmatch(k, n)) for n in J
   ]
-  commands = gait_command_velocities()
+  # The keys send the velocities the policy trained with: its clip's planned ones.
+  from walking_leap.clips import trained_clip
+
+  clip = trained_clip(os.path.dirname(os.path.abspath(checkpoint))) if checkpoint else "gait"
+  commands = gait_command_velocities(clip if clip.startswith("gait") else "gait")
   n = d["obs_normalizer._mean"].shape[-1]
   clock = n == STUDENT_HISTORY * 59  # a clock student: it runs its own gait clock
   if clock:
@@ -229,7 +235,9 @@ def main() -> int:
 
   saved = torch.load(a.checkpoint, map_location="cpu", weights_only=False)
   if "student_state_dict" in saved:
-    return export_velocity(saved["student_state_dict"], out, command_range(), source)
+    return export_velocity(
+      saved["student_state_dict"], out, command_range(), source, a.checkpoint
+    )
   from walking_leap.motion_cfg import STUDENT_HISTORY
 
   actor = saved.get("actor_state_dict", {})
@@ -239,7 +247,7 @@ def main() -> int:
   ):
     # PPO continued from a student (Walking-Leap-Motion-Gait-Flat-Velocity-v0): its actor
     # is the student's network, on the student's 285 inputs.
-    return export_velocity(actor, out, command_range(), source)
+    return export_velocity(actor, out, command_range(), source, a.checkpoint)
   if not (a.tracker and a.clips) and not (a.motion and a.clip):
     ap.error("a motion policy needs --motion and --clip (a tracker: --tracker --clips)")
   d = saved["actor_state_dict"]

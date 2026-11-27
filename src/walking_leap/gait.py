@@ -41,6 +41,16 @@ GAIT_COMMANDS = {
   "stand": (0.0, 0.0, 0.0),
 }
 
+# The same commands with larger turns: the replay turns about a fifth of what is planned
+# (three cycles: 13 deg of 60). Three times the left turn turns it 37 deg (45 of 45
+# random hands up); the right turn tipped 42 of 45 at three times, so twice: 39 deg, 44
+# of 45 up (the hand is not symmetric). Targets under 5.1 rad/s. gait_smooth2.npz.
+FAST_TURN_COMMANDS = {
+  **GAIT_COMMANDS,
+  "turn_left": (0.0, 0.0, np.radians(60.0)),
+  "turn_right": (0.0, 0.0, -np.radians(40.0)),
+}
+
 FRONT = ("if", "mf", "rf")
 FAST_MARGIN = 0.004  # m, the CoM's distance from every support edge
 THUMB_LEAN = 0.003  # m, CoM behind the front row while the thumb steps
@@ -438,13 +448,20 @@ class Crawler:
     return np.array(keys), plan[-1]
 
 
-def plan(crawler: Crawler, commands: list[str], with_phase: bool = False):
+def plan(
+  crawler: Crawler,
+  commands: list[str],
+  with_phase: bool = False,
+  table: dict | None = None,
+):
   """Servo targets (every KEYFRAME_S) from the folded-thumb stance: a first cycle in
   place that leaves the stance, then one cycle per command ("stand" holds still).
   Also, for each target, the command it serves as a planned velocity: forward and
   left (m/s, heading frame) and turn (rad/s), the cycle's step over its duration.
   ``with_phase``: also each target's place in its cycle, 0 to 1 (0 while standing), the
-  gait clock a policy without the clip can be given."""
+  gait clock a policy without the clip can be given. ``table``: each command's step
+  (default GAIT_COMMANDS; FAST_TURN_COMMANDS for gait_smooth2.npz)."""
+  table = GAIT_COMMANDS if table is None else table
   q = crawler.start.copy()
   keys = [crawler.targets_hold(q)]
   new, q = crawler.cycle(q, np.zeros(3), drag_s=FIRST_DRAG_S)
@@ -458,11 +475,9 @@ def plan(crawler: Crawler, commands: list[str], with_phase: bool = False):
       velocity.extend([np.zeros(3)] * hold)
       phase.extend([0.0] * hold)
       continue
-    new, q = crawler.cycle(q, np.array(GAIT_COMMANDS[name]))
+    new, q = crawler.cycle(q, np.array(table[name]))
     keys.extend(new)
-    velocity.extend(
-      [np.array(GAIT_COMMANDS[name]) / (len(new) * KEYFRAME_S)] * len(new)
-    )
+    velocity.extend([np.array(table[name]) / (len(new) * KEYFRAME_S)] * len(new))
     phase.extend(np.arange(len(new)) / len(new))
   if with_phase:
     return np.array(keys), np.array(velocity), np.array(phase)
@@ -480,9 +495,14 @@ def training_commands(cycles: int = 150, seed: int = 0) -> list[str]:
   return commands[:cycles]
 
 
-def training_targets(m: mujoco.MjModel, smooth: float = 0.0, with_phase: bool = False):
+def training_targets(
+  m: mujoco.MjModel,
+  smooth: float = 0.0,
+  with_phase: bool = False,
+  table: dict | None = None,
+):
   """The gait task's servo targets (the thumb slides along), planned on ``m``, and
   each target's planned velocity (see ``plan``; ``with_phase``: and its cycle phase).
   ``smooth``: see SMOOTH_IK (0 for gait.npz, SMOOTH_IK for gait_smooth.npz)."""
   crawler = Crawler(m, thumb_drag=True, smooth=smooth)
-  return plan(crawler, training_commands(), with_phase=with_phase)
+  return plan(crawler, training_commands(), with_phase=with_phase, table=table)

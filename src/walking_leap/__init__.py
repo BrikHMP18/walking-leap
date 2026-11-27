@@ -25,11 +25,13 @@ from walking_leap.env_cfg import (
 from walking_leap.motion_cfg import (
   walking_leap_clock_student_env_cfg,
   walking_leap_clock_student_v4_env_cfg,
+  walking_leap_clock_student_v5_env_cfg,
   walking_leap_gait_env_cfg,
   walking_leap_gait_student_env_cfg,
   walking_leap_gait_v2_env_cfg,
   walking_leap_gait_v3_env_cfg,
   walking_leap_gait_v4_env_cfg,
+  walking_leap_gait_v5_env_cfg,
   walking_leap_getup_env_cfg,
   walking_leap_motion_env_cfg,
   walking_leap_two_teacher_student_env_cfg,
@@ -293,4 +295,20 @@ register_mjlab_task(
   play_env_cfg=walking_leap_velocity_v7_env_cfg(play=True),
   rl_cfg=walking_leap_velocity_v3_ppo_runner_cfg(),
   runner_cls=ExploringStudentPpoRunner,
+)
+
+# Larger turns (gait_smooth2.npz): the teacher (from Gait-v3) and its clock student.
+register_mjlab_task(
+  task_id="Walking-Leap-Motion-Gait-Flat-v5",
+  env_cfg=walking_leap_gait_v5_env_cfg(),
+  play_env_cfg=walking_leap_gait_v5_env_cfg(play=True),
+  rl_cfg=walking_leap_crawl_ppo_runner_cfg(),
+  runner_cls=MotionTrackingOnPolicyRunner,
+)
+register_mjlab_task(
+  task_id="Walking-Leap-Motion-Gait-Flat-Student-v5",
+  env_cfg=walking_leap_clock_student_v5_env_cfg(),
+  play_env_cfg=walking_leap_clock_student_v5_env_cfg(play=True),
+  rl_cfg=walking_leap_two_teacher_runner_cfg(),
+  runner_cls=GaitStudentRunner,
 )

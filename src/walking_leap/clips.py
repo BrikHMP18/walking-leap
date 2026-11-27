@@ -423,20 +423,24 @@ def main() -> None:
     print(name, {"frames": len(motion.qpos), "moved_mm": moved.round(1).tolist()})
   write_gait(hand)
   write_gait(hand, smooth=True)
+  write_gait(hand, fast_turns=True)
 
 
-def write_gait(hand: RealHand, smooth: bool = False) -> Motion:
+def write_gait(
+  hand: RealHand, smooth: bool = False, fast_turns: bool = False
+) -> Motion:
   """assets/clips/gait.npz: the scripted crawl's targets (``gait.training_targets``)
   replayed on the real hand's model, with each frame's planned velocity
   (``command``: forward, left m/s; turn rad/s). ``smooth``: gait_smooth.npz, planned
   with gait.SMOOTH_IK (targets under the real loop's 6 rad/s)."""
   from walking_leap import gait
 
-  name = "gait_smooth" if smooth else "gait"
+  name = "gait_smooth2" if fast_turns else "gait_smooth" if smooth else "gait"
   extra = {}
-  if smooth:  # the smooth clip also keeps each frame's gait phase (``gait.plan``)
+  if smooth or fast_turns:  # also each frame's gait phase (``gait.plan``)
+    table = gait.FAST_TURN_COMMANDS if fast_turns else None
     targets, velocity, extra["phase"] = gait.training_targets(
-      hand.model, gait.SMOOTH_IK, with_phase=True
+      hand.model, gait.SMOOTH_IK, with_phase=True, table=table
     )
   else:
     targets, velocity = gait.training_targets(hand.model)
@@ -457,11 +461,11 @@ GAIT_KEYS = (  # command, axis of (forward, left, turn), sign
 )
 
 
-def gait_command_velocities() -> dict[str, np.ndarray]:
+def gait_command_velocities(clip: str = "gait") -> dict[str, np.ndarray]:
   """Each command's velocity as a gait student saw it: gait.npz's planned velocity
   (forward m/s, left m/s, turn rad/s) averaged over the frames of that command (its
   cycles last 1.08-1.10 s). What a keyboard sends for that command."""
-  planned = np.load(CLIPS_DIR / "gait.npz")["command"]
+  planned = np.load(CLIPS_DIR / f"{clip}.npz")["command"]
   out = {}
   for name, axis, sign in GAIT_KEYS:
     alone = np.count_nonzero(planned, axis=1) == 1
@@ -479,3 +483,14 @@ def gait_cycle_s() -> float:
   phase = np.load(CLIPS_DIR / "gait_smooth.npz")["phase"]
   starts = np.flatnonzero(np.diff(phase) < 0) + 1
   return float(np.median(np.diff(starts))) / FPS
+
+
+def trained_clip(run: Path) -> str:
+  """The clip a run trained on (its params/env.yaml's motion file), e.g. "gait_smooth":
+  whose planned velocities its keys send. "gait" when the file says nothing."""
+  import re
+
+  env = Path(run) / "params" / "env.yaml"
+  text = env.read_text() if env.exists() else ""
+  match = re.search(r"motion_file:\s*['\"]?\S*?/(\w+)\.npz", text)
+  return match.group(1) if match else "gait"

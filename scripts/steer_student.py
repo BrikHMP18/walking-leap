@@ -23,7 +23,7 @@ from mjlab.tasks.registry import load_env_cfg
 from scripted_gaits import TELEOP_KEYS
 from watch import LabeledViewer, label
 
-from walking_leap.clips import gait_command_velocities, gait_cycle_s
+from walking_leap.clips import gait_command_velocities, gait_cycle_s, trained_clip
 
 
 def main() -> None:
@@ -40,7 +40,8 @@ def main() -> None:
   args = parser.parse_args()
 
   policy = read_run(args.run, args.task, args.checkpoint)
-  commands = gait_command_velocities()
+  clip = trained_clip(policy.checkpoint.parent)
+  commands = gait_command_velocities(clip if clip.startswith("gait") else "gait")
   state = {"name": "stand", "command": torch.zeros(3, device=args.device)}
 
   cfg = load_env_cfg(policy.task, play=True)
