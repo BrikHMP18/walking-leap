@@ -476,7 +476,7 @@ class Control:
       s, q, dq, cur, qc = self.hand.read()
       pq = policy.act(command, q, dq, self.imu.gyro_mean(0.01), self.imu.latest.gravity)
       pol.append(np.abs(pq - hold))
-      self.step(pq if self.live else hold, None, self.clip_no, -1, pq)
+      self.step(pq if self.live else hold, None, self.clip_no, -1, pq, hold)
     self.rec.event(
       f"steer: done in {time.monotonic() - t0:.1f} s, policy {np.mean(pol):.3f} rad from"
       f" the stance on average, worst {np.max(pol):.2f}"

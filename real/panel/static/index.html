@@ -51,7 +51,7 @@
 
     <aside class="side">
       <section class="card">
-        <div class="card-title">Policy</div>
+        <div class="card-title">Policy <span class="badge" id="policy-badge">Scripts</span></div>
         <select id="policy"></select>
         <div class="seg" id="seg-live">
           <button data-live="0" class="on">Shadow</button>
@@ -60,8 +60,8 @@
         <div class="hint" id="policy-hint"></div>
       </section>
 
-      <section class="card">
-        <div class="card-title">Move <span class="sub">W A S D · Q E</span></div>
+      <section class="card" id="move-card">
+        <div class="card-title">Move <span class="badge" id="move-badge">1 cycle per press</span> <span class="sub" id="move-sub">W A S D · Q E</span></div>
         <div class="pad">
           <button class="key" data-key="q"><b>Q</b><small>turn left</small><i></i></button>
           <button class="key" data-key="w"><b>W</b><small>forward</small><i></i></button>
@@ -72,6 +72,7 @@
         </div>
         <div class="queue"><span class="sub">next</span><span id="queue">–</span>
           <button class="mini" id="btn-clear">clear</button></div>
+        <button class="btn quiet" id="btn-walk-end" hidden>Stop walking</button>
       </section>
 
       <section class="card">

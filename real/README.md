@@ -84,9 +84,11 @@ first; it listens on that computer only). The page loads three.js from a CDN.
 
 - **Connect** turns the torque on, lying; **Stand up**, then the moves and emotes, then
   **Lie down** or **Disconnect** (lies down if needed, then torque off).
-- **Move, W A S D Q E** (the keyboard or the buttons): one crawl cycle each, about 10 s.
-  W and S forward and back (23 mm planned), A and D sideways (8 mm), Q and E turn on the
-  spot (10°). Up to 4 wait in a queue; the hand holds its stance between them.
+- **Move, W A S D Q E** (the keyboard or the buttons). Without a policy, or with an
+  animation policy: one crawl cycle each, about 10 s. W and S forward and back (23 mm
+  planned), A and D sideways (8 mm), Q and E turn on the spot (10°). Up to 4 wait in a
+  queue; the hand holds its stance between them. **With a velocity policy: hold to walk**
+  (below).
 - **Emotes:** bow, push-ups, sway, taps, hello, the dead crawl, the happy crawl, three
   crawl cycles. Each starts and ends on the stand.
 - **Policy:** the dropdown lists `outputs/real/policies/`. A green dot marks the moves and
@@ -121,16 +123,34 @@ the real hand.
    It refuses to keep the file if the numpy copy differs from the ONNX.
 2. **Copy the file** into `outputs/real/policies/` of the repo's clone on the hand's PC:
    `scp outputs/real/policies/<name>.npz <hand PC>:<the clone>/outputs/real/policies/`.
-3. **Restart the panel** there (Ctrl-C, then `real/panel/run`): it reads that folder when
-   it starts. To try it without the hand first: `real/panel/run --fake`, or `--twin`
-   anywhere the repo runs.
+3. **Reload the page:** the panel reads that folder again at every page load (a file it
+   can't read is skipped, and its log says why). To try it without the hand first:
+   `real/panel/run --fake`, or `--twin` anywhere the repo runs.
 4. **Pick it in the dropdown.** The green dots show the moves and emotes it drives (the
    clips it was trained on, by name); the others play as written. Shadow first, then
    Live, with Mathias there.
 
-A velocity student (`kind` "velocity", the `steer` step) isn't on the panel yet: the panel
-skips it at start and says so. It runs with `real/wl play stand_up steer lie_down --policy
-<run>` ("Other policies").
+### Walking with a velocity policy
+
+A velocity student (`kind` "velocity", exported as in "Other policies") is in the dropdown
+as "walks (hold the keys)". Standing, **hold** W S A D Q E: the policy gets that command
+(forward, back, left, right, turn left, turn right) every tick, at the velocity it trained
+with for it (a key's tooltip says which); change keys while walking, it follows. **Release
+and it stands still**, the policy still balancing. The page repeats a held key every
+0.15 s; if the panel hears nothing for 0.4 s (key up, the tab hidden, the network gone) it
+stands still. Only a key going down starts a walk. **Stop walking**, an emote, Lie down or
+Disconnect ends it: a second standing still, then back to the stance, then the next thing.
+STOP as always.
+
+- **Shadow:** the hand holds its stance; the policy is computed and logged (the HUD's
+  "policy vs clip" is then its distance from the stance). **Live:** it walks.
+- Same loop as `real/wl play stand_up steer lie_down` (`Control.steer`): the guards stay
+  except the one comparing the IMU with a clip's "down" (there is no clip).
+- The map's supposed position is the command's velocity, integrated (live only): a plan,
+  not a measure.
+- Only the commands it was trained on, at their speeds: a gait student has seen one
+  command at a time, so a joystick (any speed, any mix) would ask it for what it never
+  learned. A policy trained on random continuous commands would need one.
 
 The moves were written with clip functions not in `main` yet (`crawl`,
 `backwards`, `turn`, and a sideways crawl:

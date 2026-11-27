@@ -94,3 +94,57 @@ def test_a_twin_session_connects_and_stops():
   assert s.state == "off"
   texts = [e[2] for e in s.events]
   assert any("skipped" in t for t in texts) and texts[-1] == "torque off"
+
+
+def test_a_fake_session_walks_with_a_velocity_policy(tmp_path):
+  """A velocity policy on the fake motors, live: a held key walks (the policy's targets
+  are sent), released it stands still, and the walk ends back on the stance."""
+  import policy
+
+  from walking_leap.env_cfg import ACTION_SCALE
+  from walking_leap.motion_cfg import STUDENT_HISTORY
+
+  n = STUDENT_HISTORY * sum(policy.VELOCITY_SIZES)
+  f = tmp_path / "student.npz"
+  rng = np.random.default_rng(0)
+  np.savez(
+    f, w0=rng.normal(0, 0.01, (16, n)), b0=np.zeros(16), mean=np.zeros(n), std=np.ones(n),
+    default=wlc.Clip("lie_down").q[0], scale=ACTION_SCALE, lo=-np.ones(16) * 9,
+    hi=np.ones(16) * 9, kind="velocity", history=STUDENT_HISTORY,
+    command_names=["forward"], command_values=[[0.03, 0.0, 0.0]],
+  )  # fmt: skip
+  pol = server.catalog({"student": str(f)})["policies"]["student"]
+  assert pol["kind"] == "velocity" and pol["commands"]["forward"] == [30.0, 0.0, 0.0]
+
+  def wait(cond, s=40):
+    t0 = time.monotonic()
+    while not cond() and time.monotonic() - t0 < s:
+      time.sleep(0.05)
+    assert cond()
+
+  s = server.Session("fake", (1200, 0, 600), {"student": str(f)})
+  assert s.start()[0]
+  wait(lambda: s.state == "on")
+  assert not s.walk("forward", True)[0]  # no velocity policy yet
+  assert s.ask("clip", "stand_up")[0]
+  wait(lambda: s.status()["where"] == "stand" and s.clip is None)
+  assert s.set_policy("student", True)[0]
+  assert not s.walk("turn_left", True)[0]  # not one of its commands
+  assert s.walk("forward")[0] and not s.walk_pending  # a repeat alone starts nothing
+  assert s.walk("forward", True)[0]
+  wait(lambda: s.status()["walk_cmd"] == "forward", 5)
+  for _ in range(8):
+    time.sleep(0.1)
+    s.walk("forward")
+  assert s.status()["walking"] and s.status()["policy_on"]
+  assert not s.set_policy(None, False)[0]  # not while walking
+  time.sleep(server.WALK_ALIVE_S + 0.2)  # the page goes quiet: it stands still
+  assert s.status()["walk_cmd"] == "stand"
+  assert s.end_walk()[0]
+  wait(lambda: not s.walking, 10)
+  assert s.status()["where"] == "stand"
+  assert s.stop()[0]
+  s.thread.join(40)
+  texts = [e[2] for e in s.events]
+  assert "steer: forward" in texts and any(t.startswith("steer: done") for t in texts)
+  assert texts[-1] == "torque off"

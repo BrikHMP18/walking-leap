@@ -9,6 +9,7 @@
   --ok: #3ddc84;
   --warn: #ffb020;
   --bad: #ff4d5e;
+  --walk: #b388ff; /* walking (velocity) policies; cycles use --accent */
   --radius: 14px;
   font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
 }
@@ -121,3 +122,17 @@ select { width: 100%; padding: 9px 10px; border-radius: 10px; background: #0f131
   main { grid-template-columns: 1fr; grid-template-areas: "view" "side" "row"; }
   .row { grid-template-columns: 1fr; }
 }
+
+/* The policy's kind, at a glance: scripts (grey), cycles (blue), walking (violet). */
+.badge { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; border: 1px solid var(--line); color: var(--muted); }
+.badge.cycles { color: var(--accent); border-color: rgba(76,194,255,.5); background: rgba(76,194,255,.08); }
+.badge.walk { color: var(--walk); border-color: rgba(179,136,255,.55); background: rgba(179,136,255,.1); }
+.walkmode { border-color: rgba(179,136,255,.45); }
+.walkmode .key { border-color: rgba(179,136,255,.4); background: rgba(179,136,255,.06); }
+.walkmode .key small { color: var(--walk); }
+.walkmode .key i.policy { background: var(--walk); }
+.walkmode .key:hover:not(:disabled) { border-color: var(--walk); }
+.walkmode .key.playing { border-color: var(--walk); background: rgba(179,136,255,.2); box-shadow: inset 0 0 0 1px var(--walk), 0 0 16px rgba(179,136,255,.35); }
+.walkmode .queue { display: none; }
+.chip.walk { color: var(--walk); border-color: rgba(179,136,255,.55); }
+#btn-walk-end { margin-top: 10px; width: 100%; color: var(--walk); border-color: rgba(179,136,255,.55); }
