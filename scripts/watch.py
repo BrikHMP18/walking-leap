@@ -32,6 +32,8 @@ DOES = {
   "Walking-Leap-Motion-Gait-Flat-v3": "smooth scripted crawl, light pushes",
   "Walking-Leap-Motion-Gait-Flat-v4": "smooth scripted crawl, moderate pushes",
   "Walking-Leap-Motion-Gait-Flat-Student-v2": "keyboard velocity, student of Gait-v3",
+  "Walking-Leap-Motion-Gait-Flat-Student-v3": "keyboard velocity + gait clock (student)",
+  "Walking-Leap-Motion-Gait-Flat-Velocity-v6": "keyboard velocity + gait clock (RL)",
   "Walking-Leap-Motion-Gait-Flat-Getup-v0": "gets up from a fall",
   "Walking-Leap-Motion-Gait-Flat-Student-v1": "keyboard velocity, gets up, takes pushes",
   "Walking-Leap-Motion-Gait-Flat-Velocity-v0": "keyboard velocity (RL), gets up, pushes",

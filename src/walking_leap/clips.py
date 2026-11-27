@@ -433,11 +433,15 @@ def write_gait(hand: RealHand, smooth: bool = False) -> Motion:
   from walking_leap import gait
 
   name = "gait_smooth" if smooth else "gait"
-  targets, velocity = gait.training_targets(
-    hand.model, gait.SMOOTH_IK if smooth else 0.0
-  )
+  extra = {}
+  if smooth:  # the smooth clip also keeps each frame's gait phase (``gait.plan``)
+    targets, velocity, extra["phase"] = gait.training_targets(
+      hand.model, gait.SMOOTH_IK, with_phase=True
+    )
+  else:
+    targets, velocity = gait.training_targets(hand.model)
   motion = replay(name, hand, q=targets)
-  save(motion, hand, CLIPS_DIR / f"{name}.npz", extra={"command": velocity})
+  save(motion, hand, CLIPS_DIR / f"{name}.npz", extra={"command": velocity, **extra})
   moved = 1e3 * (motion.qpos[-1, :2] - motion.qpos[0, :2])
   print(name, {"frames": len(motion.qpos), "moved_mm": moved.round(1).tolist()})
   return motion
@@ -467,3 +471,11 @@ def gait_command_velocities() -> dict[str, np.ndarray]:
 
 if __name__ == "__main__":
   main()
+
+
+def gait_cycle_s() -> float:
+  """The smooth crawl's cycle, s (gait_smooth.npz's phase: the median cycle, 50-57
+  frames for every command): the period of a clock policy's own gait clock."""
+  phase = np.load(CLIPS_DIR / "gait_smooth.npz")["phase"]
+  starts = np.flatnonzero(np.diff(phase) < 0) + 1
+  return float(np.median(np.diff(starts))) / FPS

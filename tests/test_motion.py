@@ -268,7 +268,12 @@ def test_gait_file_is_up_to_date(name):
   it. The smooth one's targets stay under the real loop's 6 rad/s."""
   hand = clips.RealHand()
   smooth = gait.SMOOTH_IK if name == "gait_smooth" else 0.0
-  targets, velocity = gait.training_targets(hand.model, smooth)
+  if smooth:
+    targets, velocity, phase = gait.training_targets(
+      hand.model, smooth, with_phase=True
+    )
+  else:
+    targets, velocity = gait.training_targets(hand.model)
   if smooth:
     assert np.abs(np.diff(targets, axis=0)).max() / gait.KEYFRAME_S < 6.0
   motion = clips.replay(name, hand, q=targets)
@@ -276,6 +281,8 @@ def test_gait_file_is_up_to_date(name):
   assert saved["fps"][0] == clips.FPS and len(saved["joint_pos"]) == len(motion.qpos)
   assert np.allclose(saved["joint_pos"], motion.qpos[:, 7:], atol=2e-3)
   assert np.allclose(saved["command"], velocity, atol=1e-6)  # planned velocity
+  if smooth:
+    assert np.allclose(saved["phase"], phase)  # each frame's gait phase
   palm = saved["body_pos_w"][:, 0]
   assert palm[:, 2].min() > 0.10  # the palm stays up (it starts at 0.13 m)
   w, x, y, z = saved["body_quat_w"][:, 0].T

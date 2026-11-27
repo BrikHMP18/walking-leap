@@ -799,3 +799,31 @@ def walking_leap_two_teacher_student_v2_env_cfg(
   if "push" in cfg.events:
     cfg.events["push"].params["velocity_range"] = PUSH_RANGE
   return cfg
+
+
+def _with_clock(group: ObservationGroupCfg) -> None:
+  """Put the gait clock (``mdp.gait_clock``) right after the command."""
+  clock = ObservationTermCfg(func=mdp.gait_clock, params={"command_name": "motion"})
+  terms = dict(group.terms)
+  group.terms = {"command": terms.pop("command"), "clock": clock, **terms}
+
+
+def walking_leap_clock_student_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+  """Student-v2 with a gait clock: the student also sees where the clip is in its
+  cycle ((sin, cos), 0 while standing), so that it can step in time without the clip.
+  Students without it took small, unsure steps (Student-v1: forward 15 mm in three
+  cycles where its teacher made 45; Velocity-v5: 46 mm in 8 s with the key held)."""
+  cfg = walking_leap_two_teacher_student_v2_env_cfg(play=play)
+  _with_clock(cfg.observations["student"])
+  return cfg
+
+
+def walking_leap_velocity_v6_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+  """Velocity-v5 (PPO on the clip's rewards, the command from the clip) with the gait
+  clock in the actor, as the clock student: continues from Student-v3."""
+  cfg = walking_leap_velocity_v5_env_cfg(play=play)
+  _with_clock(cfg.observations["actor"])
+  cfg.observations["critic"].terms["clock"] = ObservationTermCfg(
+    func=mdp.gait_clock, params={"command_name": "motion"}
+  )
+  return cfg

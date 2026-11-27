@@ -125,6 +125,10 @@ def export_velocity(d: dict, out: str, command_range=None, source: str = "{}") -
     next(v for k, v in robot.FOLDED_JOINT_POS.items() if re.fullmatch(k, n)) for n in J
   ]
   commands = gait_command_velocities()
+  n = d["obs_normalizer._mean"].shape[-1]
+  clock = n == STUDENT_HISTORY * 59  # a clock student: it runs its own gait clock
+  if clock:
+    from walking_leap.clips import gait_cycle_s
 
   def save(eps: float) -> None:
     w = {}
@@ -141,6 +145,7 @@ def export_velocity(d: dict, out: str, command_range=None, source: str = "{}") -
       scale=ACTION_SCALE,
       lo=[limits[n][0] for n in J],
       hi=[limits[n][1] for n in J],
+      **({"clock_period": gait_cycle_s()} if clock else {}),
       command_names=list(commands),
       command_values=np.array(list(commands.values())),
       **({} if command_range is None else {"command_range": command_range}),
@@ -148,7 +153,6 @@ def export_velocity(d: dict, out: str, command_range=None, source: str = "{}") -
       **w,
     )
 
-  n = d["obs_normalizer._mean"].shape[-1]
   cfg = asdict(load_rl_cfg("Walking-Leap-Motion-Gait-Flat-Student-v0").student)
   for key in ("class_name", "cnn_cfg", "rnn_type", "rnn_hidden_dim", "rnn_num_layers"):
     cfg.pop(key)
@@ -229,7 +233,10 @@ def main() -> int:
   from walking_leap.motion_cfg import STUDENT_HISTORY
 
   actor = saved.get("actor_state_dict", {})
-  if actor.get("obs_normalizer._mean", torch.zeros(1, 0)).shape[-1] == STUDENT_HISTORY * 57:
+  if actor.get("obs_normalizer._mean", torch.zeros(1, 0)).shape[-1] in (
+    STUDENT_HISTORY * 57,
+    STUDENT_HISTORY * 59,  # with the gait clock (Velocity-v6)
+  ):
     # PPO continued from a student (Walking-Leap-Motion-Gait-Flat-Velocity-v0): its actor
     # is the student's network, on the student's 285 inputs.
     return export_velocity(actor, out, command_range(), source)

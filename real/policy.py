@@ -109,6 +109,12 @@ VELOCITY_INPUTS = (
   "actions",  # its last output (16)
 )
 VELOCITY_SIZES = (3, 3, 3, 16, 16, 16)
+# Clock students (Student-v3, Velocity-v6) also read a gait clock right after the
+# command: (sin, cos) of 2 pi times the phase of a cycle of ``clock_period`` s, which the
+# policy runs itself while a command is given and holds at 0 while standing (zero
+# command), as the clip's phase does in training.
+CLOCK_INPUTS = ("command", "clock") + VELOCITY_INPUTS[1:]
+CLOCK_SIZES = (3, 2) + VELOCITY_SIZES[1:]
 
 
 class VelocityPolicy(MotionPolicy):
@@ -127,7 +133,9 @@ class VelocityPolicy(MotionPolicy):
     self.default, self.scale = d["default"].astype(float), float(d["scale"])
     self.lo, self.hi = d["lo"].astype(float), d["hi"].astype(float)
     self.history = int(d["history"])
-    assert self.mean.size == self.history * sum(VELOCITY_SIZES), "inputs do not add up"
+    self.clock_period = float(d["clock_period"]) if "clock_period" in d.files else None
+    sizes = VELOCITY_SIZES if self.clock_period is None else CLOCK_SIZES
+    assert self.mean.size == self.history * sum(sizes), "inputs do not add up"
     self.clip = None  # no clip: the loop's steer step
     self.commands = {
       str(k): d["command_values"][i].astype(float)
@@ -145,9 +153,21 @@ class VelocityPolicy(MotionPolicy):
   def reset(self, clip=None):
     self.last = np.zeros(16)
     self.past = None  # per input: HISTORY frames, oldest first
+    self.ticks = 0  # 50 Hz ticks of the gait clock since the command started
 
-  def obs(self, command, q, dq, gyro, gravity):
+  def clock(self, command):
+    """The gait clock's (sin, cos): runs while ``command`` is not zero, else 0."""
+    if not np.any(command):
+      self.ticks = 0
+      return np.array([0.0, 1.0])
+    angle = 2.0 * np.pi * ((self.ticks / 50.0 / self.clock_period) % 1.0)
+    self.ticks += 1
+    return np.array([np.sin(angle), np.cos(angle)])
+
+  def obs(self, command, q, dq, gyro, gravity, clock=None):
     now = [command, gyro, gravity, q - self.default, dq, self.last]
+    if self.clock_period is not None:
+      now.insert(1, self.clock(command) if clock is None else np.asarray(clock, float))
     if self.past is None:
       self.past = [[x.copy() for _ in range(self.history)] for x in now]
     else:

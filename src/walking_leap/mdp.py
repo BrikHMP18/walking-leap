@@ -75,6 +75,8 @@ class GaitMotionCommand(MotionCommand):
     data = np.load(cfg.motion_file)
     planned = data["command"] if "command" in data.files else np.zeros((frames, 3))
     self._planned = torch.tensor(planned, dtype=torch.float32, device=self.device)
+    phase = data["phase"] if "phase" in data.files else np.zeros(frames)
+    self._phase = torch.tensor(phase, dtype=torch.float32, device=self.device)
     self.offset_pos = torch.zeros(n, 3, device=self.device)
     self.offset_quat = torch.zeros(n, 4, device=self.device)
     self.offset_quat[:, 0] = 1.0
@@ -140,6 +142,12 @@ class GaitMotionCommand(MotionCommand):
     """The clip's planned (forward m/s, left m/s, turn rad/s) now; zero while
     fallen. Shape [B, 3]."""
     return self._planned[self.time_steps] * (~self.fallen)[:, None]
+
+  @property
+  def gait_phase(self) -> torch.Tensor:
+    """The clip's place in its gait cycle now, 0 to 1 (``gait.plan``); 0 while standing
+    or fallen, and for clips without a ``phase`` array. Shape [B]."""
+    return self._phase[self.time_steps] * (~self.fallen)
 
   def palm_tilt(self) -> torch.Tensor:
     """The real palm's tilt from upright (rad). Shape [B]."""
@@ -531,6 +539,15 @@ def fallen_flag(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
   teacher a two-teacher student copies (runner.SwitchTeacher)."""
   command = cast(GaitMotionCommand, env.command_manager.get_term(command_name))
   return command.fallen.float()[:, None]
+
+
+def gait_clock(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
+  """The gait clock, (sin, cos) of 2 pi times the cycle's phase (``GaitMotionCommand.
+  gait_phase``): (0, 1) while standing or fallen. A policy without the clip learns from
+  it which digit's turn it is; on the hand its own clock runs it (real/policy.py)."""
+  command = cast(GaitMotionCommand, env.command_manager.get_term(command_name))
+  angle = 2.0 * math.pi * command.gait_phase
+  return torch.stack([torch.sin(angle), torch.cos(angle)], dim=-1)
 
 
 def velocity_command_unless_fallen(

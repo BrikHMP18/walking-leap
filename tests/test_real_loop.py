@@ -4,6 +4,7 @@ import os
 import sys
 
 import numpy as np
+import pytest
 
 from walking_leap import robot
 from walking_leap.env_cfg import ACTION_SCALE, IMU_OBSERVATIONS
@@ -77,7 +78,14 @@ def test_velocity_policy_inputs_are_the_students():
   assert tuple(terms) == policy.VELOCITY_INPUTS
 
 
-def test_velocity_policy_builds_the_students_observation(tmp_path):
+@pytest.mark.parametrize(
+  "task",
+  [
+    "Walking-Leap-Motion-Gait-Flat-Student-v0",
+    "Walking-Leap-Motion-Gait-Flat-Student-v3",
+  ],
+)
+def test_velocity_policy_builds_the_students_observation(tmp_path, task):
   """Driving the student task with a made-up numpy policy: its 285 inputs (5 steps of
   each term, oldest first, the first step repeated after a reset) are the task's."""
   import torch
@@ -87,21 +95,22 @@ def test_velocity_policy_builds_the_students_observation(tmp_path):
   from walking_leap.motion_cfg import STUDENT_HISTORY
 
   device = "cuda:0" if torch.cuda.is_available() else "cpu"
-  cfg = load_env_cfg("Walking-Leap-Motion-Gait-Flat-Student-v0", play=True)
+  cfg = load_env_cfg(task, play=True)
   cfg.scene.num_envs = 1
   env = ManagerBasedRlEnv(cfg, device=device)
   try:
     obs, _ = env.reset()
     robot_data = env.scene["robot"].data
     default = robot_data.default_joint_pos[0].cpu().numpy()
-    n = STUDENT_HISTORY * sum(policy.VELOCITY_SIZES)
+    clock = "clock" in cfg.observations["student"].terms  # Student-v3's gait clock
+    n = STUDENT_HISTORY * sum(policy.CLOCK_SIZES if clock else policy.VELOCITY_SIZES)
     rng = np.random.default_rng(0)
     f = tmp_path / "student.npz"
     np.savez(
       f, w0=rng.normal(0, 0.02, (16, n)), b0=np.zeros(16), mean=np.zeros(n), std=np.ones(n),
       default=default, scale=ACTION_SCALE, lo=-np.ones(16) * 9, hi=np.ones(16) * 9,
       kind="velocity", history=STUDENT_HISTORY, command_names=["forward"],
-      command_values=[[0.03, 0.0, 0.0]],
+      command_values=[[0.03, 0.0, 0.0]], **({"clock_period": 1.04} if clock else {}),
     )  # fmt: skip
     P = policy.VelocityPolicy(str(f))
     terms = cfg.observations["student"].terms
@@ -117,6 +126,7 @@ def test_velocity_policy_builds_the_students_observation(tmp_path):
         now("joint_vel"),
         now("base_ang_vel"),
         now("projected_gravity"),
+        **({"clock": now("clock")} if clock else {}),
       )
       np.testing.assert_allclose(o, obs["student"][0].cpu().numpy(), atol=1e-5)
       a = P.net(o)
@@ -222,3 +232,24 @@ def test_steer_runs_a_velocity_policy_between_stand_up_and_lie_down(
   steering = ~np.isnan(cmd[:, 39 + 3])  # policy_q is set only while steering
   assert steering.sum() > 30
   np.testing.assert_allclose(cmd[steering, 3:19], cmd[steering, 38:54], atol=1e-5)
+
+
+def test_velocity_policy_runs_its_gait_clock(tmp_path):
+  """A clock student's own clock: (0, 1) standing, half a cycle later (0, -1)."""
+  from walking_leap.motion_cfg import STUDENT_HISTORY
+
+  n = STUDENT_HISTORY * sum(policy.CLOCK_SIZES)
+  f = tmp_path / "clock.npz"
+  np.savez(
+    f, w0=np.zeros((16, n)), b0=np.zeros(16), mean=np.zeros(n), std=np.ones(n),
+    default=np.zeros(16), scale=ACTION_SCALE, lo=-np.ones(16), hi=np.ones(16),
+    kind="velocity", history=STUDENT_HISTORY, command_names=["forward"],
+    command_values=[[0.03, 0.0, 0.0]], clock_period=1.0,
+  )  # fmt: skip
+  P = policy.VelocityPolicy(str(f))
+  np.testing.assert_allclose(P.clock(np.zeros(3)), [0.0, 1.0])
+  forward = np.array([0.03, 0.0, 0.0])
+  for _ in range(25):
+    P.clock(forward)
+  np.testing.assert_allclose(P.clock(forward), [0.0, -1.0], atol=1e-9)
+  np.testing.assert_allclose(P.clock(np.zeros(3)), [0.0, 1.0])  # stopping resets it
