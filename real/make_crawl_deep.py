@@ -36,24 +36,29 @@ HZ = wlc.HZ
 FINGERS = ("if", "mf", "rf")
 # The strokes, rad for the joints, s for the times, picked on the twin (open loop, 4 hands:
 # tips' grip 0.4-0.6, palm 0.2-1.0, servos 1.6-3.0; every joint under 3 rad/s). Forward:
-# all three stroke, the index's 1.26 times the ring's, the folded thumb pressing a little;
-# it curves right (the thumb dragging on the left, a guess). Its knuckles end the pull at
-# 0.4 rad: pressed harder (0.69) the hand pitched to 40 deg, the real loop's tilt guard.
-# Back: plant curled and push out (pushing moves the palm more than pulling). Turns: the
-# tips planted and swept sideways.
+# all three stroke, the index's 1.26 times the ring's; it curves right (the thumb dragging
+# on the left, a guess). One cycle per clip (2026-11-27: one press of the panel's key, about
+# 7 s; it was four, 18 s). Searched again that day on 24 twin hands (servos 1.6-3.0, tips'
+# grip 0.4-0.8, palm 0.3-1.0, caps 350 and 450 mA) once the real loop's tilt stop went to
+# 70 deg: the folded thumb pressing into the table (th_mcp +0.6, th_ipl +0.3) takes weight
+# off the palm, and the knuckles pressing to 0.9 rad through the pull, the curl to 1.0 and a
+# lift before going back to lying: +29 mm a cycle on the median hand (+16 to +57), against
+# +5 for the stroke before; tilt <= 45 deg, -11 deg of heading a cycle. A harder thumb or
+# more index moved it less. Back: plant curled and push out (pushing moves the palm more
+# than pulling). Turns: the tips planted and swept sideways.
 FORWARD = dict(
-  lift=-0.205, reach_pip=-0.341, plant=(0.45, -0.06, 0.363), pull=(0.4, 0.7, 0.918),
+  lift=-0.205, reach_pip=-0.341, plant=(0.45, -0.06, 0.363), pull=(0.9, 1.0, 0.918),
   t_lift=0.885, t_reach=0.607, t_plant=0.945, t_pull=1.488, stagger=0.072, bias=-0.262,
-  thumb=(0.255, 0.028), cycles=4,
+  thumb=(0.6, 0.3), cycles=1, end_lift=True,
 )  # fmt: skip
 BACK = dict(
   lift=-0.143, reach_pip=-0.147, plant=(0.522, 0.22, -0.229), pull=(0.337, 0.735, 1.173),
   t_lift=0.533, t_reach=0.579, t_plant=0.341, t_pull=1.101, stagger=0.267, bias=0.0,
-  thumb=(0.0, 0.0), cycles=4,
+  thumb=(0.0, 0.0), cycles=1,
 )  # fmt: skip
 SPIN = dict(
   lift=-0.2, spin=0.3, spin_plant=(0.3, 0.3, 0.3), t_lift=0.5, t_reach=0.3, t_plant=0.4,
-  t_pull=1.2, stagger=0.0, cycles=4,
+  t_pull=1.2, stagger=0.0, cycles=1,
 )  # fmt: skip
 P = FORWARD
 # Each finger's stroke, by version: +1 pulls (forward), -1 pushes (back), 0 lies still.
@@ -148,7 +153,11 @@ def targets(version="forward", p=None):
     int(0.8 * HZ),
     int(1.6 * HZ),
   )
-  n = start + p["cycles"] * cycle + 2 * lead + tail
+  # end_lift: after the last stroke each finger rises (as at a cycle's start) before it
+  # goes back to lying, so a tip planted at the stroke's end leaves the table first instead
+  # of pushing the palm back as it uncurls.
+  lift_n = int(round(p["t_lift"] * HZ)) if p.get("end_lift") else 0
+  n = start + p["cycles"] * cycle + 2 * lead + tail + lift_n
   q = np.repeat(lying[None], n, 0)
   for j, f in enumerate(FINGERS):
     cols = [I[f + "_mcp"], I[f + "_pip"], I[f + "_dip"]]
@@ -163,6 +172,9 @@ def targets(version="forward", p=None):
       for dur, val in keys(p, ways[f], k):
         t += int(round(dur * HZ))
         pts.append((t, val))
+    if lift_n:
+      t += lift_n
+      pts.append((t, keys(p, ways[f], k)[0][1]))
     pts.append((t + ramp, rest))
     for (ta, a), (tb, b) in zip(pts[:-1], pts[1:], strict=True):
       for k in range(ta, min(tb, n)):
