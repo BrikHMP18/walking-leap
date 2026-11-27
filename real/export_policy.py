@@ -103,7 +103,12 @@ def trained_command_range(run_dir: str) -> np.ndarray | None:
 
 
 def export_velocity(
-  d: dict, out: str, command_range=None, source: str = "{}", checkpoint: str = ""
+  d: dict,
+  out: str,
+  command_range=None,
+  source: str = "{}",
+  checkpoint: str = "",
+  lying: bool = False,
 ) -> int:
   """A velocity-command student (Walking-Leap-Motion-Gait-Flat-Student-v0): no clip, no
   reference; its history length and each keyboard command's velocity go in the file.
@@ -126,11 +131,24 @@ def export_velocity(
   stance = [
     next(v for k, v in robot.FOLDED_JOINT_POS.items() if re.fullmatch(k, n)) for n in J
   ]
+  if lying:  # a lying crawler (Walking-Leap-Lying-*): its actions are around lying
+    from walking_leap.lying_cfg import LYING_JOINT_POS
+
+    stance = [LYING_JOINT_POS[n] for n in J]
   # The keys send the velocities the policy trained with: its clip's planned ones.
   from walking_leap.clips import trained_clip
 
   clip = trained_clip(os.path.dirname(os.path.abspath(checkpoint))) if checkpoint else "gait"
   commands = gait_command_velocities(clip if clip.startswith("gait") else "gait")
+  if lying:  # the keys at the ends of its own range, not the standing gait's speeds
+    from walking_leap import lying_cfg as lc
+
+    commands = {
+      "forward": np.array([lc.LYING_FORWARD, 0.0, 0.0]),
+      "back": np.array([lc.LYING_BACK, 0.0, 0.0]),
+      "turn_left": np.array([0.0, 0.0, lc.LYING_TURN]),
+      "turn_right": np.array([0.0, 0.0, -lc.LYING_TURN]),
+    }
   n = d["obs_normalizer._mean"].shape[-1]
   clock = n == STUDENT_HISTORY * 59  # a clock student: it runs its own gait clock
   if clock:
@@ -165,6 +183,7 @@ def export_velocity(
       command_names=list(commands),
       command_values=np.array(list(commands.values())),
       **({} if command_range is None else {"command_range": command_range}),
+      **({"start": "lying"} if lying else {}),
       source=source,
       **w,
     )
@@ -229,6 +248,10 @@ def main() -> int:
     "--keys-only", action="store_true",
     help="velocity policies: no command range (no joystick), even if the run had one",
   )  # fmt: skip
+  ap.add_argument(
+    "--lying", action="store_true",
+    help="velocity policies: a lying crawler (Walking-Leap-Lying-*): around the lying pose",
+  )  # fmt: skip
   ap.add_argument("--onnx")
   ap.add_argument("--out")
   a = ap.parse_args()
@@ -257,7 +280,9 @@ def main() -> int:
   ):
     # PPO continued from a student (Walking-Leap-Motion-Gait-Flat-Velocity-v0): its actor
     # is the student's network, on the student's 285 inputs.
-    return export_velocity(actor, out, command_range(), source, a.checkpoint)
+    return export_velocity(
+      actor, out, command_range(), source, a.checkpoint, lying=a.lying
+    )
   if not (a.tracker and a.clips) and not (a.motion and a.clip):
     ap.error("a motion policy needs --motion and --clip (a tracker: --tracker --clips)")
   d = saved["actor_state_dict"]

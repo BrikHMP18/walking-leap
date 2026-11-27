@@ -142,6 +142,9 @@ class VelocityPolicy(MotionPolicy):
     sizes = VELOCITY_SIZES if self.clock_period is None else CLOCK_SIZES
     assert self.mean.size == self.history * sum(sizes), "inputs do not add up"
     self.clip = None  # no clip: the loop's steer step
+    # Where it steers from and back to: "stand" (the walkers), or "lying" (the lying
+    # crawlers, whose ``default`` is the lying pose).
+    self.start = str(d["start"]) if "start" in d.files else "stand"
     self.commands = {
       str(k): d["command_values"][i].astype(float)
       for i, k in enumerate(d["command_names"] if "command_names" in d.files else [])

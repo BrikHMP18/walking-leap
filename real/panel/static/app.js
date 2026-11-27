@@ -501,8 +501,11 @@ function render() {
   $('btn-stand').disabled = !on || where !== 'lying' || moving;
   $('btn-lie').disabled = !on || where === 'lying';
   $('btn-end').disabled = !on;
+  const vp = config.policies[S.policy], walks = velocity();
+  // A lying crawler (its file's start is "lying") walks from lying; the others standing.
+  const lyingWalk = walks && vp.start === 'lying';
   const standing = on && (where === 'stand' || where === 'moving');
-  const walks = velocity(), vp = config.policies[S.policy];
+  const walkReady = lyingWalk ? on && (where === 'lying' || (where === 'moving' && !!S.walking)) : standing;
   const kind = !vp ? 'scripts' : walks ? 'walk' : 'cycles';
   $('policy-badge').textContent = { scripts: 'Scripts', cycles: 'Cycles', walk: 'Walking' }[kind];
   $('policy-badge').className = 'badge ' + kind;
@@ -518,7 +521,7 @@ function render() {
       const v = stickOn ? stickVec(...STICK_KEYS[key], vp.range) : vp.commands[cmd];
       const label = stickOn ? STICK_NAMES[key] : NAMES[cmd] || '–';
       b.querySelector('small').innerHTML = v ? `${label}<br>${vecText(v, true)}` : 'not in it';
-      b.disabled = !standing || !v || (moving && !S.walking);
+      b.disabled = !walkReady || !v || (moving && !S.walking);
       b.title = v ? `hold: ${vecText(v)}${stickOn ? ' (a point of the joystick)' : ' (as trained)'}` : 'not in this policy';
       b.querySelector('i').className = v ? 'policy' : '';
       b.classList.toggle('playing', !!S.walking && top === key && !stick);
@@ -534,7 +537,7 @@ function render() {
   $('move-sub').textContent = walks ? 'release: stand still' : 'W A S D · Q E';
   $('btn-walk-end').hidden = !S.walking;
   $('stick-wrap').hidden = !stickOn;
-  $('stick').classList.toggle('off', !standing || (moving && !S.walking));
+  $('stick').classList.toggle('off', !walkReady || (moving && !S.walking));
   $('stick').classList.toggle('active', !!stick);
   $('stick-read').textContent = S.walking ? vecText(S.walk_vec) : stickOn ? 'drag to walk, let go to stand' : '';
   if (keysHeld.some((k) => { const hb = document.querySelector(`.key[data-key="${k}"]`); return hb && hb.disabled; })) {

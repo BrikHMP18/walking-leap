@@ -83,6 +83,11 @@ EMOTES = (  # clip, icon: each starts and ends in one pose, standing (most) or l
   ("taps", "🥁"),
   ("hello_start", "👋"),
   ("crawl_dead", "🧟"),
+  # real/make_crawl_deep.py: lying, the tips pressed deeper; forward, back, the turns
+  ("crawl_deep_forward", "⏫"),
+  ("crawl_deep_back", "⏬"),
+  ("crawl_deep_left", "↺"),
+  ("crawl_deep_right", "↻"),
   ("crawl_happy", "🎉"),
   ("crawl", "🐾"),
   (
@@ -447,11 +452,13 @@ class Session:
   def walk_loop(self, ctl):
     """Control.steer with the page's keys, from the stance and back to it."""
     self.walk_pending = False
-    if ctl.where != "stand":
-      self.event(f"walking starts standing, the hand is {ctl.where}: skipped")
-      return
     if not isinstance(self.policy, VelocityPolicy):
       self.event("walking needs a velocity policy: skipped")
+      return
+    if ctl.where != self.policy.start:
+      self.event(
+        f"this policy walks from {self.policy.start}, the hand is {ctl.where}: skipped"
+      )
       return
     self.walking, self.walk_cmd = True, "stand"
     try:
@@ -644,6 +651,7 @@ def catalog(policies):
         range=None if p.command_range is None else [
           [round(a * 1e3, 1), round(b * 1e3, 1)] for a, b in p.command_range[:2]
         ] + [[round(float(np.degrees(c)), 1) for c in p.command_range[2]]],
+        start=p.start,
         source=source,
       )  # fmt: skip
       continue
