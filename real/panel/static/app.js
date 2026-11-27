@@ -425,7 +425,7 @@ function buildSide() {
   $('emotes').innerHTML = config.emotes.map((e) => {
     const c = config.clips[e.name];
     return `<button class="emote" data-name="${e.name}" title="${c.note}"><span class="icon">${e.icon}</span>
-      <span><div class="name">${c.title}</div><div class="meta">${c.seconds} s</div></span><i></i></button>`;
+      <span><div class="name">${c.title}</div><div class="meta">${c.seconds} s${c.start === 'lying' ? ' · lying' : ''}</div></span><i></i></button>`;
   }).join('');
   document.querySelectorAll('.emote').forEach((b) => (b.onclick = () => api('emote', { name: b.dataset.name })));
   document.querySelectorAll('.key').forEach((b) => {
@@ -508,7 +508,8 @@ function render() {
     release();  // a held key's button got disabled under the finger: no pointerup will come
   }
   document.querySelectorAll('.emote').forEach((b) => {
-    b.disabled = !standing;
+    const lyingOne = (config.clips[b.dataset.name] || {}).start === 'lying';
+    b.disabled = lyingOne ? !on || where !== 'lying' || moving : !standing;
     b.querySelector('i').className = covers(b.dataset.name) ? 'policy' : '';
     b.classList.toggle('playing', S.clip === b.dataset.name);
   });

@@ -82,10 +82,19 @@ a stage that misses its check stops the plan there.
 
 ## On the real hand
 
-- The panel already walks a velocity student (Mathias, "Walking with a velocity policy"
-  in real/README.md): hold W S A D Q E, release to stand still, shadow then live. It sends
-  one command at a time, at the speed the policy trained with; combinations (W+Q) need a
-  policy trained on mixed commands (stage 3) and the panel summing the held keys.
+- The panel already walks a velocity student ("Walking with a velocity policy" in
+  real/README.md): hold a key, release to stand still, shadow then live. What reaches the
+  policy depends on its exported file:
+  - **Named commands** (`command_names`, `command_values`): one at a time, at its speeds.
+    W `forward`, S `back`, A/D `left`/`right`, Q/E `forward_left`/`forward_right` (curving
+    while walking) if it has them, else `turn_left`/`turn_right`. Keys stack: the last one
+    still held wins (W, add Q: it curves; let go of Q: straight again).
+  - **A command range** (`command_range`, 3 x 2: forward m/s, left m/s, turn rad/s; min,
+    max): a joystick on the panel (on screen, or a gamepad's left stick), up/down the
+    forward speed and left/right the turn rate at the same time, never outside the range.
+    Export with `real/export_policy.py <run>/model_<it>.pt --command-range FWD_MIN FWD_MAX
+    LEFT_MIN LEFT_MAX TURN_MIN TURN_MAX`. Only for a policy trained on mixed commands
+    inside those ranges (stage 3): the first student has seen one command at a time.
 - The repo's LEAP driver already moves each setpoint at most 0.05 rad a tick (100 Hz:
   5 rad/s), whatever the policy asks.
 - Walking and pushes run with today's guards. Getting up needs the 40 deg tilt guard
