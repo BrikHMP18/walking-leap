@@ -218,3 +218,11 @@ real/panel/run        # Connect, Stand up, Policy: brik_keys_v5, Shadow, then Li
 ```
 
 In simulation: `uv run python scripts/steer_student.py outputs/hf/runs/2026-11-27_09-59-38_Walking-Leap-Motion-Gait-Flat-Student-v5_s42 --checkpoint model_1998.pt --fallen`.
+
+Another 1000 distillation iterations (model_2997, run
+`2026-11-27_11-12-30_Walking-Leap-Motion-Gait-Flat-Student-v5_s42`): forward 31.2 mm/s,
+turns +5.3/-4.1 deg/s, back -6.5, right -4.7; gets up from 100 %; still down after
+0.5/0.75/1.0 m/s kicks 0/12/25 %. Its numpy export drives the simulated hand at
+32.2 mm/s, turns +5.2/-4.6 deg/s. **`brik_keys_v5b`** replaces `brik_keys_v5` for the
+demo (Hugging Face `runs/2026-11-27_11-12-30_Walking-Leap-Motion-Gait-Flat-Student-v5_s42/real/brik_keys_v5b.npz`,
+sha256 b68645a466a8...): the same steps, that file instead.
