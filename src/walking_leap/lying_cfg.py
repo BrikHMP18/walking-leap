@@ -455,6 +455,25 @@ def walking_leap_lying_track_v1_env_cfg(play: bool = False) -> ManagerBasedRlEnv
   return cfg
 
 
+def walking_leap_lying_low_v6_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+  """``Walking-Leap-Lying-Low-Flat-v6``: Low-v5 paying forward and turning three times
+  more. Lying-v3 at 900 and Low-v5 at 400 passed the twin's guard but only backed up
+  (8 mm/s, in training's sim too): pushing is easy, pulling and turning were not
+  learned. Fine-tuned from Low-v5."""
+  cfg = walking_leap_lying_goal_env_cfg(play=play, low=True)
+  cfg.rewards["turn"].weight = 3 * TURN_WEIGHT
+  cfg.rewards["forward"] = RewardTermCfg(
+    func=lm.capped_forward,
+    weight=2 * PROGRESS_WEIGHT,
+    params={
+      "command_name": "twist",
+      "min_speed": MIN_SPEED,
+      "reference_speed": LYING_FORWARD,
+    },
+  )
+  return cfg
+
+
 def walking_leap_lying_v3_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
   """The lying learner with half the initial exploration noise (std 0.5)."""
   cfg = walking_leap_lying_ppo_runner_cfg()

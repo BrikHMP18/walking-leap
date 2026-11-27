@@ -257,3 +257,16 @@ class held_far_goal(held_far):
 def far_goals(env: ManagerBasedRlEnv, error: float, span: float) -> torch.Tensor:
   """``far_setpoints`` (worst motor) on the policy's targets (``_goal_off``)."""
   return ((_goal_off(env) - error) / span).clamp(0.0, 1.0).max(dim=-1).values
+
+
+def capped_forward(
+  env: ManagerBasedRlEnv,
+  command_name: str,
+  min_speed: float,
+  reference_speed: float,
+  asset_cfg: SceneEntityCfg = _ROBOT,
+) -> torch.Tensor:
+  """``capped_progress`` only while the command goes forward (pulling: the hard way)."""
+  cmd = env.command_manager.get_command(command_name)
+  pay = capped_progress(env, command_name, min_speed, reference_speed, asset_cfg)
+  return torch.where(cmd[:, 0] > 0, pay, 0.0)
