@@ -122,9 +122,10 @@ def main() -> None:
     f"{args.hands} random hands: standing, fwd mm, left mm, turn deg | fastest joint"
   )
   for name, commands in sequences.items():
-    keys, _ = gait.plan(crawler, commands)
+    keys, velocity = gait.plan(crawler, commands)
     motion = clips.replay(f"gait_{name}", hand, q=keys)
-    clips.save(motion, hand, args.out / f"gait_{name}.npz")
+    # The planned velocity too: a velocity student reads it as its command.
+    clips.save(motion, hand, args.out / f"gait_{name}.npz", extra={"command": velocity})
     nominal = play(hand.model, keys)
     runs = [play(m, keys) for m in hands]
     up = [r for r in runs if not r["fell"]]

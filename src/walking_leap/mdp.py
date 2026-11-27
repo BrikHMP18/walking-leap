@@ -563,6 +563,37 @@ def commanded_velocity_exp(
   return 0.5 * (torch.exp(-lin) + torch.exp(-yaw)) * (~motion.fallen).float()
 
 
+def _heading_velocity(env: ManagerBasedRlEnv, motion_command: str):
+  motion = cast(GaitMotionCommand, env.command_manager.get_term(motion_command))
+  asset: Entity = env.scene[motion.cfg.entity_name]
+  heading = yaw_quat(asset.data.root_link_quat_w)
+  velocity = quat_apply_inverse(heading, asset.data.root_link_lin_vel_w)[:, :2]
+  return motion, velocity, asset.data.root_link_ang_vel_w[:, 2]
+
+
+def commanded_lin_vel_exp(
+  env: ManagerBasedRlEnv, command_name: str, motion_command: str, std: float
+) -> torch.Tensor:
+  """exp(-|v_cmd - v|^2 / std^2), the palm's horizontal velocity in its heading frame
+  (m/s); zero while fallen. Its own term, so that standing still under a translation
+  command earns nothing here (``commanded_velocity_exp`` paid half for the zero turn)."""
+  command = env.command_manager.get_command(command_name)
+  motion, velocity, _ = _heading_velocity(env, motion_command)
+  err = torch.sum((velocity - command[:, :2]) ** 2, dim=-1)
+  return torch.exp(-err / std**2) * (~motion.fallen).float()
+
+
+def commanded_yaw_vel_exp(
+  env: ManagerBasedRlEnv, command_name: str, motion_command: str, std: float
+) -> torch.Tensor:
+  """exp(-(w_cmd - w)^2 / std^2), the turn rate (rad/s); zero while fallen."""
+  command = env.command_manager.get_command(command_name)
+  motion, _, yaw_rate = _heading_velocity(env, motion_command)
+  return (
+    torch.exp(-((yaw_rate - command[:, 2]) ** 2) / std**2) * (~motion.fallen).float()
+  )
+
+
 def not_fallen(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
   """1 while the hand is up by the command's own test (``GaitMotionCommand.fallen``)."""
   command = cast(GaitMotionCommand, env.command_manager.get_term(command_name))

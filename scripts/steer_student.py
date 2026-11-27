@@ -1,5 +1,5 @@
-"""Steer a velocity-command student (Walking-Leap-Motion-Gait-Flat-Student-v0) with
-the keyboard, in mjlab's MuJoCo viewer: what the real hand's loop will do.
+"""Steer a velocity-command policy (the gait students, Walking-Leap-Motion-Gait-Flat-
+Velocity-v0) with the keyboard, in mjlab's MuJoCo viewer: what the real hand's loop will do.
 
 The keys of scripted_gaits.py: arrows move (forward, back, left, right), ',' and '.'
 turn; the same key again stops. A key sends the velocity the student was trained
@@ -20,19 +20,20 @@ from eval_velocity import load_policy, read_run
 from mjlab.envs import ManagerBasedRlEnv
 from mjlab.rl import RslRlVecEnvWrapper
 from mjlab.tasks.registry import load_env_cfg
-from mjlab.viewer import NativeMujocoViewer
 from scripted_gaits import TELEOP_KEYS
+from watch import LabeledViewer, label
 
 from walking_leap.clips import gait_command_velocities
-
-STUDENT_TASK = "Walking-Leap-Motion-Gait-Flat-Student-v0"
 
 
 def main() -> None:
   parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
   parser.add_argument("run", type=Path)
-  parser.add_argument("--task", default=STUDENT_TASK)
+  parser.add_argument("--task", default=None, help="default: from the run's name")
   parser.add_argument("--checkpoint", default=None)
+  parser.add_argument(
+    "--fallen", action="store_true", help="every reset (Enter) drops the hand fallen"
+  )
   parser.add_argument(
     "--device", default="cuda:0" if torch.cuda.is_available() else "cpu"
   )
@@ -44,7 +45,11 @@ def main() -> None:
 
   cfg = load_env_cfg(policy.task, play=True)
   cfg.scene.num_envs = 1
-  term = cfg.observations["student"].terms["command"]
+  if args.fallen:
+    cfg.commands["motion"].fallen_start_prob = 1.0
+  # Student tasks call the policy's group "student"; Velocity-v0 (PPO) calls it "actor".
+  group = "student" if "student" in cfg.observations else "actor"
+  term = cfg.observations[group].terms["command"]
 
   def keyboard_command(env: ManagerBasedRlEnv) -> torch.Tensor:
     fallen = env.command_manager.get_term("motion").fallen
@@ -73,7 +78,16 @@ def main() -> None:
     "turn, the same key again stops; Enter resets, Space pauses",
     flush=True,
   )
-  NativeMujocoViewer(env, actor, key_callback=key).run()
+  title, subtitle = label(policy.task, args.run, policy.checkpoint)
+
+  def status() -> str:
+    v = state["command"].cpu().numpy()
+    return (
+      f"command: {state['name']} ({1e3 * v[0]:+.0f} fwd, {1e3 * v[1]:+.0f} left mm/s,"
+      f" {np.degrees(v[2]):+.0f} deg/s)\narrows move, ',' '.' turn, same key: stop"
+    )
+
+  LabeledViewer(env, actor, title, subtitle, status=status, key_callback=key).run()
   env.close()
 
 

@@ -128,7 +128,8 @@ scripts/
   eval_velocity.py     Fixed velocity commands: how far each policy goes, or watch one
   eval_gait.py         Scripted-crawl policies: how far each command moves the palm
   eval_survival.py     Gait-v1 and its student: getting up, and kicks, next to a still hand
-  steer_student.py     The velocity student from the keyboard, in the MuJoCo viewer
+  steer_student.py     A velocity policy from the keyboard, in the MuJoCo viewer (--fallen: start down)
+  watch.py             Watch any trained run in the MuJoCo viewer, its name on the window
   gait_real_clip.py    The smooth scripted crawl as a clip for the real loop and panel
   merge_teachers.py    Two PPO checkpoints -> the two-teacher student's teacher
 PLAN.md            Roadmap and verified progress

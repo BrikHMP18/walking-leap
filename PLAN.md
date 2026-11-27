@@ -215,7 +215,14 @@ The trainings below that are checked come from a branch, not from this milestone
           `test_slew_action_moves_the_setpoint_at_the_drivers_rate`,
           `test_gait_file_is_up_to_date[gait_smooth]`; 10-iteration smoke runs of each
           stage chained (teachers -> student -> PPO -> export)
-    - [ ] Train them on Modal and pass each stage's check
+    - [x] Stage 1 on Modal (docs/velocity_policy.md, "Results"): Getup-v0 gets up from
+          100 % of falls (median 0.7 s); Gait-v2 falls under kicks far less than a still
+          hand (0/34/66 % against 22/69/72 %) but walks forward about 14 mm/s (check:
+          20; missed)
+    - [x] Stage 2, Student-v1: gets up from 97 % of falls, takes kicks as Gait-v2 and
+          recovers more (still down 0/31/25 %); commands right in sign but small (forward
+          15 mm in three cycles against Gait-v2's 45)
+    - [ ] Stage 3 (Velocity-v0) and its check against Flat-v3
   - [ ] A velocity-command student: distill v1 (teacher, given the planner's
         reference for a commanded velocity) into a policy that sees only the command,
         encoders and IMU, then fine-tune it with PPO on velocity tracking

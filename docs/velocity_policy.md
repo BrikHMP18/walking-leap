@@ -57,6 +57,28 @@ Tasks (all on Gait-v2's hand: the smooth clip, randomization, cables, pushes up 
 `real/export_policy.py` exports a Student-v1 or a Velocity-v0 checkpoint as a velocity
 policy (285 inputs) for the panel and the loop.
 
+## Results
+
+Stage 1 (Modal, seed 42; nominal hand, no noise; 32 hands per survival test):
+
+| Teacher | Run | Check | Measured |
+| --- | --- | --- | --- |
+| Getup-v0 | `2026-11-27_01-04-30_..._Getup-v0_s42`, 2000 it, W&B `xu0o7ard` | gets up from >= 70 % | **100 %**, median 0.7 s; standing, kicks of 0.5/0.75/1.0 m/s fell 0/3/25 %, still down 0/0/3 % |
+| Gait-v2 | `2026-11-27_01-04-12_..._Gait-Flat-v2_s42`, from Gait-v1, 2000 it, W&B `1krnj3it` | falls under kicks below the still hand | 0/34/66 % against 22/69/72 % |
+| Gait-v2 | same | forward >= 20 mm/s | **missed**: 45 of 90 mm in three cycles (about 14 mm/s walking; its clip 87 mm); back +2 of -60, left 14 of 45, right +5 of -24, turns +6/-17 of 60 deg |
+
+Gait-v2 traded speed for robustness. The plan went on: stage 3 rewards the commanded
+velocity itself, and the student needs the teachers mainly for getting up and the gait's
+shape.
+
+Stage 2, Student-v1 (`2026-11-27_02-11-32_..._Student-v1_s42`, 1000 it, W&B `xuv7rvzn`;
+behaviour loss 0.099 -> 0.015): gets up from **97 %** of falls (median 0.7 s); kicks of
+0.5/0.75/1.0 m/s fell 0/38/62 %, still down at the end 0/31/25 % (Gait-v2: 0/28/66 %).
+Commands (three cycles, the clip's planned velocity as its command): the right signs but
+small, forward 15 mm (Gait-v2 45), back -6, turns +5/-9 deg, and a drift of 16 mm to the
+left even standing. As SuperMimic found, distillation passes on getting up and pushes
+better than command tracking; stage 3 is for that.
+
 Every stage ends on a check with the scripts above (metrics independent of the reward);
 a stage that misses its check stops the plan there.
 

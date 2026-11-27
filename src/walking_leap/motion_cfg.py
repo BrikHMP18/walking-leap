@@ -684,3 +684,26 @@ def walking_leap_velocity_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   )
   cfg.rewards["up"] = RewardTermCfg(func=mdp.not_fallen, weight=1.0, params=motion)
   return cfg
+
+
+# Velocity-v1's tracking: the scales Walking-Leap-Flat-v3 learned to walk with
+# (env_cfg.LIN_VEL_TRACKING_STD, YAW_TRACKING_STD). Velocity-v0's single term (std
+# 0.01 m/s, half its value from the turn) barely moved: forward 1.7 of 30 mm/s.
+KEYS_LIN_STD, KEYS_YAW_STD = 0.02, 0.25  # m/s, rad/s
+
+
+def walking_leap_velocity_v1_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+  """Velocity-v0 with the velocity reward split in two: the horizontal velocity (std
+  KEYS_LIN_STD, weight 2) and the turn rate (std KEYS_YAW_STD, weight 1), so that
+  standing still under a translation command pays nothing for it. Same observations:
+  it continues from Velocity-v0."""
+  cfg = walking_leap_velocity_env_cfg(play=play)
+  del cfg.rewards["commanded_velocity"]
+  keys = {"command_name": "twist", "motion_command": "motion"}
+  cfg.rewards["track_lin_vel"] = RewardTermCfg(
+    func=mdp.commanded_lin_vel_exp, weight=2.0, params={**keys, "std": KEYS_LIN_STD}
+  )
+  cfg.rewards["track_yaw_vel"] = RewardTermCfg(
+    func=mdp.commanded_yaw_vel_exp, weight=1.0, params={**keys, "std": KEYS_YAW_STD}
+  )
+  return cfg
