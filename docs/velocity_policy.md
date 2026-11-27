@@ -230,3 +230,18 @@ sha256 b68645a466a8...): the same steps, that file instead.
 A last 1000 iterations (model_3996) were mixed: back -7.8 and left turns +5.9 better,
 forward 28.0 and recovery after 1.0 m/s kicks (34 % still down) worse. `brik_keys_v5b`
 stays the demo policy.
+
+**Released as `brik_keyboard_v1`** (2026-11-27): `brik_keys_v5b` exported again under a
+name for the panel, the same arrays (only the export time differs); Hugging Face
+`runs/2026-11-27_11-12-30_Walking-Leap-Motion-Gait-Flat-Student-v5_s42/real/brik_keyboard_v1.npz`,
+sha256 04fdcd5c4e0d... On the hand's PC:
+
+```sh
+cd ~/walking-leap/repo && git pull
+wget -O outputs/real/policies/brik_keyboard_v1.npz \
+  https://huggingface.co/Autobrik/walking-leap/resolve/main/runs/2026-11-27_11-12-30_Walking-Leap-Motion-Gait-Flat-Student-v5_s42/real/brik_keyboard_v1.npz
+sha256sum outputs/real/policies/brik_keyboard_v1.npz   # 04fdcd5c4e0d...
+real/panel/run        # Connect, Stand up, Policy: brik_keyboard_v1, Shadow, then Live; hold W A S D Q E
+```
+
+In simulation: `uv run python scripts/steer_student.py outputs/hf/runs/2026-11-27_11-12-30_Walking-Leap-Motion-Gait-Flat-Student-v5_s42 --checkpoint model_2997.pt --fallen`.
