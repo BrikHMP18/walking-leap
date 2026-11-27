@@ -41,6 +41,7 @@ from walking_leap.motion_cfg import (
   walking_leap_velocity_v4_env_cfg,
   walking_leap_velocity_v5_env_cfg,
   walking_leap_velocity_v6_env_cfg,
+  walking_leap_velocity_v7_env_cfg,
 )
 from walking_leap.robot import MEASURED_STIFFNESS, TORSION
 from walking_leap.runner import (
@@ -282,4 +283,14 @@ register_mjlab_task(
   play_env_cfg=walking_leap_clock_student_v4_env_cfg(play=True),
   rl_cfg=walking_leap_two_teacher_runner_cfg(),
   runner_cls=GaitStudentRunner,
+)
+
+# Velocity-v6 with three times the weight on the planned velocity: past the clip's short
+# turns and backs. From Student-v3.
+register_mjlab_task(
+  task_id="Walking-Leap-Motion-Gait-Flat-Velocity-v7",
+  env_cfg=walking_leap_velocity_v7_env_cfg(),
+  play_env_cfg=walking_leap_velocity_v7_env_cfg(play=True),
+  rl_cfg=walking_leap_velocity_v3_ppo_runner_cfg(),
+  runner_cls=ExploringStudentPpoRunner,
 )

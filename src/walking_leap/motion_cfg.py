@@ -837,3 +837,12 @@ def walking_leap_clock_student_v4_env_cfg(play: bool = False) -> ManagerBasedRlE
   if "push" in cfg.events:
     cfg.events["push"].params["velocity_range"] = MODERATE_PUSH_RANGE
   return cfg
+
+
+def walking_leap_velocity_v7_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+  """Velocity-v6 with the planned velocity weighing 3 (1 in v6): the clip itself turns,
+  backs and sidesteps short of its plan (three turn cycles: 7-22 deg of 60), and the
+  clock students follow it there (turns 2-3 deg/s of 18.5)."""
+  cfg = walking_leap_velocity_v6_env_cfg(play=play)
+  cfg.rewards["planned_velocity"].weight = 3.0
+  return cfg
