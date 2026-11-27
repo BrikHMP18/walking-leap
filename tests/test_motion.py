@@ -444,6 +444,10 @@ def test_keyboard_velocity_tasks_fit_together():
     velocity.observations["actor"].terms
   )  # v1 continues from v0
   assert {"track_lin_vel", "track_yaw_vel"} <= set(velocity_v1.rewards)
+  velocity_v2 = load_env_cfg("Walking-Leap-Motion-Gait-Flat-Velocity-v2")
+  assert list(velocity_v2.observations["actor"].terms) == list(
+    velocity.observations["actor"].terms
+  )  # v2 continues from v1
   actor = list(v1.observations["actor"].terms)
   assert list(v2.observations["actor"].terms) == actor
   assert list(student.observations["teacher"].terms) == actor

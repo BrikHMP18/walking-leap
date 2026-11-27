@@ -107,3 +107,19 @@ class StudentPpoRunner(MotionTrackingOnPolicyRunner):
         if name.endswith("std_param"):
           p.fill_(self.RESUME_STD)
     return saved.get("infos") or {}
+
+
+class ExploringStudentPpoRunner(StudentPpoRunner):
+  """``StudentPpoRunner`` that widens the noise to 0.3: Velocity-v1 at std 0.1 sat in
+  "standing is safe" (forward 4.3 of 30 mm/s after 500 iterations)."""
+
+  RESUME_STD = 0.3
+
+  def load(self, path, load_cfg=None, strict=True, map_location=None) -> dict:
+    # A PPO checkpoint (continuing Velocity-v1) loads as usual, then gets the wider noise.
+    infos = super().load(path, load_cfg, strict, map_location)
+    with torch.no_grad():
+      for name, p in self.alg.actor.named_parameters():
+        if name.endswith("std_param"):
+          p.fill_(self.RESUME_STD)
+    return infos

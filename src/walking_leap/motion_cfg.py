@@ -707,3 +707,11 @@ def walking_leap_velocity_v1_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg
     func=mdp.commanded_yaw_vel_exp, weight=1.0, params={**keys, "std": KEYS_YAW_STD}
   )
   return cfg
+
+
+def walking_leap_velocity_v2_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+  """Velocity-v1 with the translation reward weighing 3 (2 in v1): with ``up``,
+  ``upright`` and the stance's height the hand earned 2.5 a step for standing safely."""
+  cfg = walking_leap_velocity_v1_env_cfg(play=play)
+  cfg.rewards["track_lin_vel"].weight = 3.0
+  return cfg

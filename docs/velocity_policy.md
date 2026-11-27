@@ -113,3 +113,13 @@ a stage that misses its check stops the plan there.
 - Walking and pushes run with today's guards. Getting up needs the 40 deg tilt guard
   raised for that test (Mathias' call) and a soft surface.
 - Order, as always: shadow, then live, Mathias there.
+
+Stage 3, Velocity-v0 (`2026-11-27_02-50-07_..._Velocity-v0_s42`, from Student-v1, 1500
+it; `scripts/eval_velocity.py` at model_1200): it kept getting up and taking pushes, and
+turned (left +3.1 of 19 deg/s), but barely translated: forward 1.7 of 30 mm/s, back 0,
+sideways under 0.4. Its single velocity term paid half for a zero turn while standing,
+and its translation scale (0.01 m/s) gave a standing hand no slope towards walking.
+Velocity-v1 (the term split, Flat-v3's scales, from v0's end) reached forward 4.3 mm/s
+after 500 iterations: better, still standing too much (noise 0.1, learning rate 3e-4).
+Velocity-v2 (translation weight 3, noise 0.3, learning rate 1e-3) runs from v1's
+model_2000 and, as a check on what the teachers pass on, from scratch.

@@ -163,3 +163,9 @@ def walking_leap_velocity_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
     algorithm=replace(ppo.algorithm, learning_rate=3e-4),
     max_iterations=1_500,
   )
+
+
+def walking_leap_velocity_v2_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+  """Velocity-v2: mjlab's PPO defaults again (learning rate 1e-3, adaptive) with the
+  wider noise of ``runner.ExploringStudentPpoRunner``; also trains from scratch."""
+  return replace(walking_leap_crawl_ppo_runner_cfg(), max_iterations=1_500)
