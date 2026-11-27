@@ -131,8 +131,15 @@ class VelocityPolicy(MotionPolicy):
     self.clip = None  # no clip: the loop's steer step
     self.commands = {
       str(k): d["command_values"][i].astype(float)
-      for i, k in enumerate(d["command_names"])
+      for i, k in enumerate(d["command_names"] if "command_names" in d.files else [])
     }
+    # (forward m/s, left m/s, turn rad/s) x (min, max) it trained on, if it took any
+    # command in a range (then the panel offers a joystick); None: only its named ones.
+    self.command_range = (
+      d["command_range"].astype(float).reshape(3, 2)
+      if "command_range" in d.files
+      else None
+    )
     self.reset()
 
   def reset(self, clip=None):

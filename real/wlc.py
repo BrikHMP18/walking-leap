@@ -472,7 +472,9 @@ class Control:
       if key is not None and key != "quit":
         name = "stand" if key == name else key
         self.rec.event(f"steer: {name}")
-      command = policy.commands.get(name, np.zeros(3))
+      command = (
+        keys.vector() if hasattr(keys, "vector") else policy.commands.get(name, np.zeros(3))
+      )
       s, q, dq, cur, qc = self.hand.read()
       pq = policy.act(command, q, dq, self.imu.gyro_mean(0.01), self.imu.latest.gravity)
       pol.append(np.abs(pq - hold))

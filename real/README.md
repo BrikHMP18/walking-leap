@@ -135,10 +135,31 @@ the real hand.
 ### Walking with a velocity policy
 
 A velocity student (`kind` "velocity", exported as in "Other policies") is in the dropdown
-as "walks (hold the keys)". Standing, **hold** W S A D Q E: the policy gets that command
-(forward, back, left, right, turn left, turn right) every tick, at the velocity it trained
-with for it (a key's tooltip says which); change keys while walking, it follows. **Release
-and it stands still**, the policy still balancing. The page repeats a held key every
+under "Walking". Standing, **hold** a key: the policy gets that key's command every tick,
+at the velocity it trained with for it (the key shows it); keys stack (hold W, add Q: it
+curves; let go of Q: straight again). **Release and it stands still**, the policy still
+balancing.
+
+| Key | Command (the first one the policy has) |
+| --- | --- |
+| W, S | `forward`, `back` |
+| Q, E | `forward_left`, `forward_right` (curve while walking), else `turn_left`, `turn_right` (on the spot) |
+| A, D | `left`, `right` (sideways) |
+
+**The joystick:** a policy trained on *ranges* of commands (any forward speed and turn rate
+inside them, at the same time) gets one, on screen (drag it) or a gamepad's left stick
+(the browser's Gamepad API; plug it in and press a button once). Up and down set the
+forward speed (to its fastest forward and back), left and right the turn rate; sideways
+stays 0. The command never leaves the range in the file. The keys become points of it
+(W full forward, Q full forward and full left turn, A turning on the spot...). Export the
+policy with its range, in m/s, m/s and rad/s (forward, left, turn; min, max):
+
+```sh
+uv run python real/export_policy.py <student run>/model_<it>.pt --command-range -0.02 0.03 0 0 -0.3 0.3
+```
+
+Its named commands (`command_names`, `command_values`, from the training's gait) stay as
+they are for the keys. The page repeats a held key every
 0.15 s; if the panel hears nothing for 0.4 s (key up, the tab hidden, the network gone) it
 stands still. Only a key going down starts a walk. **Stop walking**, an emote, Lie down or
 Disconnect ends it: a second standing still, then back to the stance, then the next thing.
@@ -150,9 +171,8 @@ STOP as always.
   except the one comparing the IMU with a clip's "down" (there is no clip).
 - The map's supposed position is the command's velocity, integrated (live only): a plan,
   not a measure.
-- Only the commands it was trained on, at their speeds: a gait student has seen one
-  command at a time, so a joystick (any speed, any mix) would ask it for what it never
-  learned. A policy trained on random continuous commands would need one.
+- No range in its file (like the first gait student, which has seen one command at a
+  time at fixed speeds): keys only, at those speeds.
 
 The moves were written with clip functions not in `main` yet (`crawl`,
 `backwards`, `turn`, and a sideways crawl:

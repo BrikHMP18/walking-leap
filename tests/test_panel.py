@@ -96,9 +96,36 @@ def test_a_twin_session_connects_and_stops():
   assert any("skipped" in t for t in texts) and texts[-1] == "torque off"
 
 
+def test_keys_and_the_joystick_follow_the_policy():
+  old = server.walk_keys({"forward": 0, "back": 0, "turn_left": 0, "turn_right": 0})
+  assert old == {"w": "forward", "s": "back", "q": "turn_left", "e": "turn_right"}
+  carrot = server.walk_keys(
+    {"forward": 0, "back": 0, "forward_left": 0, "forward_right": 0}
+  )
+  assert carrot == {
+    "w": "forward",
+    "s": "back",
+    "q": "forward_left",
+    "e": "forward_right",
+  }
+  r = np.array(
+    [[-0.02, 0.03], [0.0, 0.0], [-0.3, 0.3]]
+  )  # back 20, forward 30 mm/s, 0.3 rad/s
+  np.testing.assert_allclose(server.stick_command(0, 1, r), [0.03, 0, 0])
+  np.testing.assert_allclose(server.stick_command(0, -0.5, r), [-0.01, 0, 0])
+  np.testing.assert_allclose(server.stick_command(-1, 1, r), [0.03, 0, 0.3])  # up-left
+  np.testing.assert_allclose(
+    server.stick_command(0.5, 0, r), [0, 0, -0.15]
+  )  # right: turn right
+  np.testing.assert_allclose(
+    server.stick_command(9, 9, r), [0.03, 0, -0.3]
+  )  # never out of it
+
+
 def test_a_fake_session_walks_with_a_velocity_policy(tmp_path):
   """A velocity policy on the fake motors, live: a held key walks (the policy's targets
-  are sent), released it stands still, and the walk ends back on the stance."""
+  are sent), released it stands still, the joystick steers inside the policy's range, and
+  the walk ends back on the stance."""
   import policy
 
   from walking_leap.env_cfg import ACTION_SCALE
@@ -111,10 +138,13 @@ def test_a_fake_session_walks_with_a_velocity_policy(tmp_path):
     f, w0=rng.normal(0, 0.01, (16, n)), b0=np.zeros(16), mean=np.zeros(n), std=np.ones(n),
     default=wlc.Clip("lie_down").q[0], scale=ACTION_SCALE, lo=-np.ones(16) * 9,
     hi=np.ones(16) * 9, kind="velocity", history=STUDENT_HISTORY,
-    command_names=["forward"], command_values=[[0.03, 0.0, 0.0]],
+    command_names=["forward", "forward_left"], command_values=[[0.03, 0, 0], [0.03, 0, 0.3]],
+    command_range=[[-0.02, 0.03], [0.0, 0.0], [-0.3, 0.3]],
   )  # fmt: skip
   pol = server.catalog({"student": str(f)})["policies"]["student"]
   assert pol["kind"] == "velocity" and pol["commands"]["forward"] == [30.0, 0.0, 0.0]
+  assert pol["keys"] == {"w": "forward", "q": "forward_left"}
+  assert pol["range"] == [[-20.0, 30.0], [0.0, 0.0], [-17.2, 17.2]]
 
   def wait(cond, s=40):
     t0 = time.monotonic()
@@ -139,6 +169,16 @@ def test_a_fake_session_walks_with_a_velocity_policy(tmp_path):
   assert s.status()["walking"] and s.status()["policy_on"]
   assert not s.set_policy(None, False)[0]  # not while walking
   time.sleep(server.WALK_ALIVE_S + 0.2)  # the page goes quiet: it stands still
+  assert s.status()["walk_cmd"] == "stand"
+  assert s.walk("forward_left")[0]  # Q on this policy: curve left
+  time.sleep(0.1)
+  assert s.status()["walk_vec"] == [30.0, 0.0, 17.2]
+  assert s.walk_stick(0.5, 1.0)[0]  # the joystick: up and a bit right
+  time.sleep(0.1)
+  assert s.status()["walk_cmd"] == "joystick"
+  assert s.status()["walk_vec"] == [30.0, 0.0, -8.6]
+  assert s.walk_stick(0.0, 0.0)[0]  # back in the middle: stand still
+  time.sleep(0.1)
   assert s.status()["walk_cmd"] == "stand"
   assert s.end_walk()[0]
   wait(lambda: not s.walking, 10)

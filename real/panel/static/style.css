@@ -136,3 +136,18 @@ select { width: 100%; padding: 9px 10px; border-radius: 10px; background: #0f131
 .walkmode .queue { display: none; }
 .chip.walk { color: var(--walk); border-color: rgba(179,136,255,.55); }
 #btn-walk-end { margin-top: 10px; width: 100%; color: var(--walk); border-color: rgba(179,136,255,.55); }
+
+/* The joystick (a velocity policy with a command range). */
+.stick-wrap { display: flex; align-items: center; gap: 14px; margin-top: 12px; }
+.stick-wrap[hidden] { display: none; }
+.stick { position: relative; flex: none; width: 128px; height: 128px; border-radius: 50%; border: 1px solid rgba(179,136,255,.5); background: radial-gradient(circle, rgba(179,136,255,.14), rgba(179,136,255,.03) 70%); touch-action: none; cursor: grab; }
+.stick.off { opacity: .35; cursor: not-allowed; }
+.stick .knob { position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; border-radius: 50%; background: var(--walk); transform: translate(-50%, -50%); box-shadow: 0 0 14px rgba(179,136,255,.5); transition: transform .08s; }
+.stick.active .knob { transition: none; }
+.stick .ax { position: absolute; font-size: 10px; color: var(--muted); }
+.stick .ax.up { top: 4px; left: 50%; transform: translateX(-50%); }
+.stick .ax.down { bottom: 4px; left: 50%; transform: translateX(-50%); }
+.stick .ax.left { left: 6px; top: 50%; transform: translateY(-50%); }
+.stick .ax.right { right: 6px; top: 50%; transform: translateY(-50%); }
+.stick-read { color: var(--walk); font-size: 12px; line-height: 1.5; }
+.walkmode .key small { line-height: 1.25; text-align: center; }

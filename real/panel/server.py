@@ -15,7 +15,11 @@ the hand down, then torque off. Everything is logged as with ``wl`` (outputs/rea
 With a velocity policy (``kind`` "velocity", a gait student) the same keys walk instead:
 held, the policy gets that command every tick (Control.steer, as ``wl play ... steer``);
 released, or the page silent for WALK_ALIVE_S, it stands still. A clip asked for ends the
-walk first (a second standing still, then back to the stance).
+walk first (a second standing still, then back to the stance). Each key's command is the
+first of WALK[key] the policy has (Q and E curve if it has ``forward_left``/``_right``).
+A policy whose file has ``command_range`` (3 x 2: forward m/s, left m/s, turn rad/s; min,
+max) also takes a joystick (the page's, or a gamepad's left stick): up/down is the forward
+speed, left/right the turn rate, both kept inside that range.
 """
 
 import argparse
@@ -54,7 +58,10 @@ EMOTES = (  # clip, icon: the ones that start and end standing
   ("crawl_dead", "🧟"),
   ("crawl_happy", "🎉"),
   ("crawl", "🐾"),
-  ("gait_forward", "🏃"),  # scripts/gait_real_clip.py: the fast scripted crawl, 3 cycles
+  (
+    "gait_forward",
+    "🏃",
+  ),  # scripts/gait_real_clip.py: the fast scripted crawl, 3 cycles
 )
 TITLES = {
   "pushups": "Push-ups",
@@ -64,15 +71,31 @@ TITLES = {
   "crawl": "Crawl ×3",
 }
 QUEUE_MAX = 4
-WALK = {  # key: a velocity policy's command (walking_leap.clips.GAIT_KEYS)
-  "w": "forward",
-  "s": "back",
-  "a": "left",
-  "d": "right",
-  "q": "turn_left",
-  "e": "turn_right",
+WALK = {  # key: the commands it can mean, the first one the policy has wins
+  "w": ("forward",),
+  "s": ("back",),
+  "a": ("left",),
+  "d": ("right",),
+  "q": ("forward_left", "turn_left"),  # curve left while walking, or turn on the spot
+  "e": ("forward_right", "turn_right"),
 }
 WALK_ALIVE_S = 0.4  # a held key is repeated by the page; silent this long: stand still
+
+
+def walk_keys(commands):
+  """Each key's command for a policy with these commands (keys it can't use left out)."""
+  return {k: next(n for n in names if n in commands) for k, names in WALK.items() if any(n in commands for n in names)}  # fmt: skip
+
+
+def stick_command(x, y, command_range):
+  """A joystick's (x right, y up), each in [-1, 1], as (forward m/s, left m/s, turn rad/s)
+  inside the policy's range: up to its fastest forward, down to its fastest back, left
+  and right to its fastest turns; no sideways."""
+  lo, hi = command_range[:, 0], command_range[:, 1]
+  x, y = float(np.clip(x, -1, 1)), float(np.clip(y, -1, 1))
+  forward = y * hi[0] if y > 0 else -y * lo[0]
+  turn = -x * hi[2] if x < 0 else x * lo[2]
+  return np.clip(np.array([forward, 0.0, turn]), lo, hi)
 
 
 def policy_kind(path):
@@ -90,10 +113,11 @@ def covers(policy, name):
 
 
 class PageKeys:
-  """What Control.steer reads, from the page: the held key's command when it changes,
-  "stand" when released or when the page went silent, "quit" to end the walk."""
+  """What Control.steer reads, from the page: the held key's command (or "joystick") when
+  it changes, "stand" when released or when the page went silent, "quit" to end the walk;
+  and ``vector()``, the command itself, every tick."""
 
-  HELP = "hold W A S D Q E to walk, release to stand still"
+  HELP = "hold W A S D Q E (or the joystick) to walk, release to stand still"
 
   def __init__(self, session):
     self.s, self.last = session, "stand"
@@ -103,12 +127,14 @@ class PageKeys:
     if s.walk_quit:
       s.walk_cmd = "stand"
       return "quit"
-    fresh = time.monotonic() - s.walk_seen < WALK_ALIVE_S
-    want = (s.walk_key if fresh else None) or "stand"
+    want = s.walk_label()
     if want == self.last:
       return None
     self.last = s.walk_cmd = want
     return want
+
+  def vector(self):
+    return self.s.walk_vector()
 
 
 def r(x, n=4):
@@ -147,6 +173,10 @@ class Session:
     # Walking with a velocity policy: the held command (from the page) and when it came.
     self.walking, self.walk_pending, self.walk_quit = False, False, False
     self.walk_key, self.walk_seen, self.walk_cmd = None, 0.0, "stand"
+    self.walk_vec, self.walk_logged = (
+      None,
+      (0.0, None),
+    )  # the joystick's command; last logged
 
   # --------------------------------------------------------------- from the page
   def event(self, text):
@@ -212,18 +242,64 @@ class Session:
       return False, "walking needs a velocity policy"
     if command is not None and command not in self.policy.commands:
       return False, f"{self.policy_name} has no {command}"
-    self.walk_key, self.walk_seen = command, time.monotonic()
-    if command is not None and start and not (self.walking or self.walk_pending):
+    self.walk_key, self.walk_vec, self.walk_seen = command, None, time.monotonic()
+    return self._walk_start(command is not None and start, command or "stand")
+
+  def walk_stick(self, x, y, start=False):
+    """The page's joystick (or gamepad), x right and y up in [-1, 1]; repeated while held.
+    Near the middle it is a release (stand still)."""
+    if self.state != "on":
+      return False, "connect first"
+    p = self.policy
+    if not isinstance(p, VelocityPolicy) or p.command_range is None:
+      return False, "this policy has no joystick (no command_range in its file)"
+    held = abs(x) > 0.05 or abs(y) > 0.05
+    v = stick_command(x, y, p.command_range) if held else None
+    self.walk_key, self.walk_vec, self.walk_seen = (
+      ("joystick" if held else None),
+      v,
+      time.monotonic(),
+    )
+    if (
+      v is not None and self.walking
+    ):  # the log gets the command twice a second at most
+      t, last = self.walk_logged
+      if (
+        self.ctl is not None
+        and time.monotonic() - t > 0.5
+        and (last is None or np.abs(v - last).max() > 1e-3)
+      ):
+        self.walk_logged = (time.monotonic(), v)
+        self.ctl.rec.event(
+          f"steer: joystick {v[0] * 1e3:+.1f} mm/s, {np.degrees(v[2]):+.1f} deg/s"
+        )
+    return self._walk_start(held and start, "joystick" if held else "stand")
+
+  def _walk_start(self, start, msg):
+    if start and not (self.walking or self.walk_pending):
       if self.queue:
         return False, "the queue first (or clear it)"
       self.walk_pending = True
       self.cmds.put(("walk", None))
-    return True, command or "stand"
+    return True, msg
+
+  def walk_label(self):
+    fresh = time.monotonic() - self.walk_seen < WALK_ALIVE_S
+    return (self.walk_key if fresh else None) or "stand"
+
+  def walk_vector(self):
+    """The command now: (forward m/s, left m/s, turn rad/s); zeros when standing still."""
+    name = self.walk_label()
+    if name == "stand" or self.policy is None:
+      return np.zeros(3)
+    if name == "joystick":
+      return self.walk_vec if self.walk_vec is not None else np.zeros(3)
+    return self.policy.commands.get(name, np.zeros(3))
 
   def end_walk(self):
     if not (self.walking or self.walk_pending):
       return False, "not walking"
-    self.walk_quit, self.walk_key = True, None
+    self.walk_quit, self.walk_key, self.walk_vec = True, None, None
     return True, "standing still, then back to the stance"
 
   # --------------------------------------------------------------- the session thread
@@ -253,7 +329,7 @@ class Session:
       c, s = np.cos(self.base[2]), np.sin(self.base[2])
       self.est = self.base + np.array([c * p[0] - s * p[1], s * p[0] + c * p[1], p[2]])
     elif self.walking and self.live:  # the command's velocity, integrated: a plan too
-      v = self.policy.commands.get(self.walk_cmd, np.zeros(3))
+      v = self.walk_vector()
       c, s = np.cos(self.est[2]), np.sin(self.est[2])
       self.est = (
         self.est + np.array([c * v[0] - s * v[1], s * v[0] + c * v[1], v[2]]) / wlc.HZ
@@ -462,6 +538,7 @@ class Session:
       policy_kind=None if self.policy is None else ("velocity" if isinstance(self.policy, VelocityPolicy) else "motion"),
       walking=self.walking,
       walk_cmd=self.walk_cmd if self.walking else None,
+      walk_vec=None if not self.walking else [round(float(v), 1) for v in self.walk_vector() * [1e3, 1e3, 57.29578]],
       temps=[None if np.isnan(x) else round(x) for x in self.temps],
       event_id=self.event_id,
       map_epoch=self.map_epoch,
@@ -508,6 +585,10 @@ def catalog(policies):
           c: [round(v[0] * 1e3, 1), round(v[1] * 1e3, 1), round(float(np.degrees(v[2])), 1)]
           for c, v in p.commands.items()
         },
+        keys=walk_keys(p.commands),
+        range=None if p.command_range is None else [
+          [round(a * 1e3, 1), round(b * 1e3, 1)] for a, b in p.command_range[:2]
+        ] + [[round(float(np.degrees(c)), 1) for c in p.command_range[2]]],
       )  # fmt: skip
       continue
     if kind != "motion":
@@ -616,10 +697,17 @@ def handler(session, info):
       elif path == "/api/walk":  # repeated while a key is held: refusals not logged
         if body.get("end"):
           ok, msg = session.end_walk()
+        elif body.get("stick") is not None:
+          x, y = body["stick"]
+          ok, msg = session.walk_stick(float(x), float(y), bool(body.get("start")))
         else:
-          key = body.get("key")
-          command = WALK.get(str(key).lower()) if key else None
-          ok, msg = session.walk(command, bool(body.get("start")))
+          key = str(body.get("key") or "").lower()
+          pol = session.policy
+          keys = walk_keys(pol.commands) if isinstance(pol, VelocityPolicy) else {}
+          if key and isinstance(pol, VelocityPolicy) and key not in keys:
+            ok, msg = False, f"{session.policy_name} has nothing on {key.upper()}"
+          else:
+            ok, msg = session.walk(keys.get(key), bool(body.get("start")))
         return self.send(200, {"ok": ok, "msg": msg})
       elif path == "/api/policy":
         ok, msg = session.set_policy(body.get("name"), body.get("live", False))
@@ -662,7 +750,7 @@ def main() -> int:
     mode=kind,
     gains=gains,
     rest_q=r(wlc.Clip("stand_up").q[0]),
-    walk=WALK,
+    walk=list(WALK),
   )
   session = Session(kind, gains, policies)
   if kind == "real":
