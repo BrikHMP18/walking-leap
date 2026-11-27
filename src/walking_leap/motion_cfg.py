@@ -863,3 +863,11 @@ def walking_leap_clock_student_v5_env_cfg(play: bool = False) -> ManagerBasedRlE
   old = cfg.commands["motion"]
   old.motion_file = str(CLIPS_DIR / "gait_smooth2.npz")
   return cfg
+
+
+def walking_leap_velocity_v8_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+  """Velocity-v7 (PPO on the clip's rewards with the gait clock, the planned velocity
+  weighing 3) on gait_smooth2.npz (larger turns): continues from Student-v5."""
+  cfg = walking_leap_velocity_v7_env_cfg(play=play)
+  cfg.commands["motion"].motion_file = str(CLIPS_DIR / "gait_smooth2.npz")
+  return cfg

@@ -38,6 +38,7 @@ DOES = {
   "Walking-Leap-Motion-Gait-Flat-Velocity-v7": "keyboard + clock (RL, plan-weighted)",
   "Walking-Leap-Motion-Gait-Flat-v5": "smooth scripted crawl, larger turns",
   "Walking-Leap-Motion-Gait-Flat-Student-v5": "keyboard + clock, larger turns",
+  "Walking-Leap-Motion-Gait-Flat-Velocity-v8": "keyboard + clock, larger turns (RL)",
   "Walking-Leap-Motion-Gait-Flat-Getup-v0": "gets up from a fall",
   "Walking-Leap-Motion-Gait-Flat-Student-v1": "keyboard velocity, gets up, takes pushes",
   "Walking-Leap-Motion-Gait-Flat-Velocity-v0": "keyboard velocity (RL), gets up, pushes",
