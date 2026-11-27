@@ -49,7 +49,7 @@ MOVES = {  # key: clip (real/clips/)
   "q": "turn_left",
   "e": "turn_right",
 }
-EMOTES = (  # clip, icon: the ones that start and end standing
+EMOTES = (  # clip, icon: each starts and ends in one pose, standing (most) or lying
   ("bow", "🙇"),
   ("pushups", "💪"),
   ("sway", "🌊"),
@@ -569,7 +569,7 @@ def catalog(policies):
           round(float(np.degrees(c.palm[-1, 2]))),
         ]
       )
-      clips[name] = dict(title=title, seconds=round(len(c.q) / wlc.HZ, 1), note=c.meta.get("note", ""), travel=travel)  # fmt: skip
+      clips[name] = dict(title=title, seconds=round(len(c.q) / wlc.HZ, 1), note=c.meta.get("note", ""), travel=travel, start=c.start, end=c.end)  # fmt: skip
   pols = {}
   for name, path in policies.items():
     try:

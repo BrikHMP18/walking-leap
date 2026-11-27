@@ -89,10 +89,16 @@ first; it listens on that computer only). The page loads three.js from a CDN.
   planned), A and D sideways (8 mm), Q and E turn on the spot (10°). Up to 4 wait in a
   queue; the hand holds its stance between them. **With a velocity policy: hold to walk**
   (below).
-- **Emotes:** bow, push-ups, sway, taps, hello, the dead crawl, the happy crawl, three
-  crawl cycles, and the fast scripted crawl (`gait_forward`, three cycles of `gait.py`'s
-  smooth planner, 9.5 s; `scripts/gait_real_clip.py`; not run on the real hand yet).
-  Each starts and ends on the stand.
+- **Emotes:** bow, push-ups, sway, taps, hello, the happy crawl, three crawl cycles, and
+  the fast scripted crawl (`gait_forward`, three cycles of `gait.py`'s smooth planner,
+  9.5 s; `scripts/gait_real_clip.py`; not run on the real hand yet): each starts and ends
+  on the stand. **The dead crawl is played lying** (offered only while the hand lies, "·
+  lying" on its button): it never stands up; index, middle and ring raise, straighten in
+  the air, plant at full reach and curl, dragging the palm, four times (13.8 s); the thumb
+  stays folded. Made by `make_crawl_dead.py` in the twin's physics. There it barely moves
+  forward and wobbles (from -14 to +28 mm, up to 42 mm sideways and 23 deg over 12
+  simulated hands; the palm's friction on the table, never measured, decides much of it),
+  front heaving up to 29 deg, no motor at its cap for more than 0.9 s.
 - **Policy:** the dropdown lists `outputs/real/policies/`. A green dot marks the moves and
   emotes it drives; the rest play as written. Shadow (computed and logged) or Live (its
   targets go to the motors; on the real hand it asks first).

@@ -19,13 +19,30 @@ import wlc  # noqa: E402
 
 
 def test_moves_and_emotes_chain_from_the_stand():
-  stand = wlc.Clip("stand_up").q[-1]
+  """Every move and emote starts and ends in one pose: the stand, or lying (as a session
+  starts), within 0.05 rad, so they chain."""
+  pose = {"stand": wlc.Clip("stand_up").q[-1], "lying": wlc.Clip("stand_up").q[0]}
   names = list(server.MOVES.values()) + [e for e, _ in server.EMOTES]
   for name in names:
     c = wlc.Clip(name)
-    assert (c.start, c.end) == ("stand", "stand"), name
-    assert np.abs(c.q[0] - stand).max() <= 0.05, name
-    assert np.abs(c.q[-1] - stand).max() <= 0.05, name
+    assert c.start == c.end and c.start in pose, name
+    assert c.start == "stand" or name not in server.MOVES.values(), (
+      name
+    )  # moves: standing
+    assert np.abs(c.q[0] - pose[c.start]).max() <= 0.05, name
+    assert np.abs(c.q[-1] - pose[c.start]).max() <= 0.05, name
+
+
+def test_the_dead_crawl_lies_and_stays_safe():
+  """The dead crawl never stands: lying from start to end, its plan tilts the palm less
+  than 30 deg, no joint faster than 3 rad/s, the thumb as lying."""
+  c, lying = wlc.Clip("crawl_dead"), wlc.Clip("stand_up").q[0]
+  assert (c.start, c.end) == ("lying", "lying")
+  tilt = np.degrees(np.arccos(np.clip(-c.grav[:, 2], -1, 1)))
+  assert tilt.max() < 30
+  assert np.abs(np.diff(c.q, axis=0)).max() * wlc.HZ <= 3.0
+  thumb = [wlc.JOINT_NAMES.index(n) for n in ("th_cmc", "th_axl", "th_mcp", "th_ipl")]
+  assert np.abs(c.q[:, thumb] - lying[thumb]).max() < 1e-6
 
 
 def test_moves_go_where_their_keys_say():
