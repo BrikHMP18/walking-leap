@@ -54,8 +54,11 @@ the real hand and what to train next).
   simulated hands (`scripts/gait_clips.py`). Trained on Modal (one seed, 3000
   iterations, W&B `pmh0h1vl`); in the training log (iterations 2958-2999) the palm
   stays 8.5 mm and 4.1° from the clip, episodes last 499.4 of 500 steps, no falls.
-  Not yet evaluated outside training; it follows the clip's commands, not the
-  keyboard yet.
+  Outside training it goes forward as planned but falls short on the other commands, as
+  its clip does; Gait-v1 is no better and gets up from 3 % of falls (PLAN.md). The
+  planner's targets also jumped faster than the real loop allows, now fixed
+  (`gait.SMOOTH_IK`). Next: a keyboard-velocity policy that walks fast, takes pushes and
+  gets up, [docs/velocity_policy.md](docs/velocity_policy.md).
 
 What the next training batch should change, from all of it:
 [docs/next_training.md](docs/next_training.md). See [PLAN.md](PLAN.md).
@@ -111,6 +114,7 @@ docs/
   real_hand.md     The first runs on the real hand: what ran, sim against real
   handoff.md       Start here: what this branch adds, how to run it, what to train next
   next_training.md What the next training batch should change, and why
+  velocity_policy.md The plan for a keyboard-velocity policy that gets up and takes pushes
   rl_notes.md      Notes: the networks' inputs and outputs, PPO and its alternatives
   data/real_clips/ The joint targets the real hand played (50 Hz, with the sim's IMU reading)
   data/real_runs/  What the real hand recorded in six runs: motors, IMU and the targets sent
@@ -125,6 +129,7 @@ scripts/
   eval_gait.py         Scripted-crawl policies: how far each command moves the palm
   eval_survival.py     Gait-v1 and its student: getting up, and kicks, next to a still hand
   steer_student.py     The velocity student from the keyboard, in the MuJoCo viewer
+  gait_real_clip.py    The smooth scripted crawl as a clip for the real loop and panel
 PLAN.md            Roadmap and verified progress
 AGENTS.md          Conventions for contributors and coding agents
 ```
@@ -418,7 +423,7 @@ rsync -av <cluster>:<repository path>/logs/rsl_rl/ logs/rsl_rl/
 ## Tests
 
 ```sh
-uv run pytest                              # 89 tests: 26 robot/physics, 41 clips and environments, 22 real hand (recordings, loop, IMU reader)
+uv run pytest                              # 154 tests: 26 robot/physics, 41 clips and environments, 87 real hand (recordings, loop, driver, panel, IMU reader)
 CUDA_VISIBLE_DEVICES="" uv run pytest      # CPU only (~5 min)
 uv run ruff check src tests scripts && uv run ruff format --check src tests scripts
 uv run python scripts/render_media.py      # regenerate docs/media/

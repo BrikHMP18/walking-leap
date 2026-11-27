@@ -196,7 +196,19 @@ The trainings below that are checked come from a branch, not from this milestone
         (`test_gait_v1_keeps_v0_observations`,
         `test_gait_v1_clip_waits_while_fallen_and_resumes_where_the_hand_gets_up`);
         10-iteration smoke run, and continuing a v0 checkpoint loads
-  - [ ] Train v1 from v0's checkpoint; measure falls, recoveries and push survival
+  - [x] Train v1 from v0's checkpoint (Modal, W&B `82n1zwib`, iterations 3000-5998);
+        measured (`scripts/eval_gait.py`, `scripts/eval_survival.py`): commands no better
+        than v0 (forward 142 of 180 mm), gets up from 3 % of falls, kicks of 0.5/0.75/1.0
+        m/s fell 19/53/59 % (a still hand 22/69/72 %)
+  - [x] The planner's targets jumped up to 69 rad/s between frames (a tip's lowest vertex
+        switches as it rolls; the real loop refuses 6): `gait.SMOOTH_IK` keeps every
+        command under 4.9 rad/s, 45 of 45 random hands up (`scripts/gait_clips.py --smooth`)
+  - [x] `real/clips/gait_forward.npz` (`scripts/gait_real_clip.py`): three smooth forward
+        cycles, stand to stand, on the panel; 45 of 45 random hands up, at most 13.2 deg
+        from the clip's "down" (the loop stops past 15). Not run on the real hand yet
+  - [ ] A keyboard-velocity policy that walks fast, takes pushes and gets up
+        (docs/velocity_policy.md): teachers Gait-v2 and Getup-v0, a student of both, PPO
+        on the student's own task; the panel's velocity mode (W A S D Q E held)
   - [ ] A velocity-command student: distill v1 (teacher, given the planner's
         reference for a commanded velocity) into a policy that sees only the command,
         encoders and IMU, then fine-tune it with PPO on velocity tracking

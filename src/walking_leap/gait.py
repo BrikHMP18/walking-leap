@@ -49,6 +49,12 @@ SLIDE_SPEED = 0.1  # m/s, fastest thumb slide
 COM_SPEED = 0.08  # m/s, fastest CoM move with all four down
 # The thumb steps only going ahead, turning at most this per cycle.
 STEP_TURN_MAX = np.radians(3.0)
+# Smooth keyframes: each IK solve also stays near the previous keyframe (weight per
+# rad). A planted tip is its mesh's lowest vertex, which switches vertex as the tip
+# rolls; without this term the pose jumped up to 69 rad/s between keyframes (the real
+# hand's loop refuses targets faster than 6 rad/s); with it, 5.1 at most over all
+# commands. 0 keeps the targets of gait.npz (Gait-v0/v1).
+SMOOTH_IK = 1.0
 
 
 def lowest_point(m: mujoco.MjModel, d: mujoco.MjData, digit: str) -> np.ndarray:
@@ -122,9 +128,10 @@ class TipIk:
   """Inverse kinematics and statics for the hand standing on its fingertips (the
   lowest point of each tip mesh)."""
 
-  def __init__(self, m: mujoco.MjModel) -> None:
+  def __init__(self, m: mujoco.MjModel, smooth: float = 0.0) -> None:
     self.m = m
     self.d = mujoco.MjData(m)
+    self.smooth = smooth  # see SMOOTH_IK
     self.palm = m.body("palm").id
     self.weight = float(m.body_subtreemass[self.palm]) * G
     self.floor = m.geom("floor").id
@@ -161,9 +168,12 @@ class TipIk:
     """Keyframe by differential inverse kinematics from ``q`` (the previous one):
     ``planted`` tips stay, the ``swing`` tip (digit, point) follows its path, the CoM
     goes to (com_xy, com_z), the palm keeps ``quat_ref``. Smooth and fast; no torque
-    or clearance terms (the four-digit stance does not need them)."""
+    or clearance terms (the four-digit stance does not need them). ``self.smooth``
+    weighs staying near ``q`` (see SMOOTH_IK)."""
     m, d = self.m, self.d
-    q = q.copy()
+    q_prev, q = q.copy(), q.copy()
+    keep = np.zeros((len(self.dadr), m.nv))
+    keep[np.arange(len(self.dadr)), self.dadr] = 1.0
     tasks = [(k, p, 30.0) for k, p in planted.items()]
     if swing:
       tasks.append((swing[0], swing[1], 10.0))
@@ -187,6 +197,9 @@ class TipIk:
       mujoco.mj_jacBody(m, d, None, jrot, self.palm)
       rows.append(0.3 * jrot)
       errs.append(0.3 * quat_error(quat_ref, d.xquat[self.palm]))
+      if self.smooth:
+        rows.append(self.smooth * keep)
+        errs.append(self.smooth * (q_prev[self.jadr] - q[self.jadr]))
       a, b = np.vstack(rows), np.concatenate(errs)
       step = np.linalg.solve(a.T @ a + 1e-4 * np.eye(m.nv), a.T @ b)
       mujoco.mj_integratePos(m, q, step, 1.0)
@@ -255,12 +268,13 @@ class Crawler:
     thumb_lean=THUMB_LEAN,
     thumb_lift=THUMB_LIFT,
     thumb_drag=False,
+    smooth=0.0,
   ):
     self.m, self.swing_s, self.drag_s, self.lift = m, swing_s, drag_s, lift
     self.shift_s, self.thumb_s, self.thumb_drag = shift_s, thumb_s, thumb_drag
     self.thumb_lean, self.thumb_lift = thumb_lean, thumb_lift
     self.thumb_margin = thumb_margin
-    self.ik = TipIk(m)
+    self.ik = TipIk(m, smooth)
     self.palm = self.ik.palm
     stance = settled_stance(m)
     self.start = stance.qpos.copy()
@@ -459,7 +473,10 @@ def training_commands(cycles: int = 150, seed: int = 0) -> list[str]:
   return commands[:cycles]
 
 
-def training_targets(m: mujoco.MjModel) -> tuple[np.ndarray, np.ndarray]:
+def training_targets(
+  m: mujoco.MjModel, smooth: float = 0.0
+) -> tuple[np.ndarray, np.ndarray]:
   """The gait task's servo targets (the thumb slides along), planned on ``m``, and
-  each target's planned velocity (see ``plan``)."""
-  return plan(Crawler(m, thumb_drag=True), training_commands())
+  each target's planned velocity (see ``plan``). ``smooth``: see SMOOTH_IK (0 for
+  gait.npz, SMOOTH_IK for gait_smooth.npz)."""
+  return plan(Crawler(m, thumb_drag=True, smooth=smooth), training_commands())

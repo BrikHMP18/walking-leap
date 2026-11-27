@@ -99,10 +99,14 @@ def main() -> None:
   parser.add_argument("--mix", type=int, default=12, help="commands in gait_mix")
   parser.add_argument("--seed", type=int, default=0)
   parser.add_argument("--out", type=Path, default=ROOT / "outputs" / "clips")
+  parser.add_argument(
+    "--smooth", action="store_true", help="plan with gait.SMOOTH_IK (gait_smooth.npz)"
+  )
   args = parser.parse_args()
 
   hand = clips.RealHand()
-  crawler = gait.Crawler(gaits.build(), thumb_drag=True)
+  smooth = gait.SMOOTH_IK if args.smooth else 0.0
+  crawler = gait.Crawler(gaits.build(), thumb_drag=True, smooth=smooth)
   rng = np.random.default_rng(args.seed)
   sequences = {name: [name] * args.cycles for name in COMMANDS}
   mix = [str(rng.choice(list(COMMANDS))) for _ in range(args.mix)]
@@ -115,7 +119,7 @@ def main() -> None:
 
   print(
     f"{'clip':11s} {'s':>5s} | nominal: fwd mm, left mm, turn deg | "
-    f"{args.hands} random hands: standing, fwd mm, left mm, turn deg"
+    f"{args.hands} random hands: standing, fwd mm, left mm, turn deg | fastest joint"
   )
   for name, commands in sequences.items():
     keys, _ = gait.plan(crawler, commands)
@@ -134,7 +138,7 @@ def main() -> None:
       f"{'FELL ' if nominal['fell'] else ''}{nominal['forward_mm']:+5.0f} "
       f"{nominal['left_mm']:+5.0f} {nominal['turned_deg']:+5.0f} | "
       f"{len(up):2d}/{len(runs)} {span('forward_mm'):>10s} {span('left_mm'):>10s} "
-      f"{span('turned_deg'):>9s}"
+      f"{span('turned_deg'):>9s} | {np.abs(np.diff(keys, axis=0)).max() * 50:4.1f} rad/s"
     )
   print(f"wrote {args.out}/gait_*.npz")
 

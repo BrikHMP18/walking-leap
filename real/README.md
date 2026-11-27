@@ -90,7 +90,9 @@ first; it listens on that computer only). The page loads three.js from a CDN.
   queue; the hand holds its stance between them. **With a velocity policy: hold to walk**
   (below).
 - **Emotes:** bow, push-ups, sway, taps, hello, the dead crawl, the happy crawl, three
-  crawl cycles. Each starts and ends on the stand.
+  crawl cycles, and the fast scripted crawl (`gait_forward`, three cycles of `gait.py`'s
+  smooth planner, 9.5 s; `scripts/gait_real_clip.py`; not run on the real hand yet).
+  Each starts and ends on the stand.
 - **Policy:** the dropdown lists `outputs/real/policies/`. A green dot marks the moves and
   emotes it drives; the rest play as written. Shadow (computed and logged) or Live (its
   targets go to the motors; on the real hand it asks first).

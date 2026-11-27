@@ -54,6 +54,7 @@ EMOTES = (  # clip, icon: the ones that start and end standing
   ("crawl_dead", "🧟"),
   ("crawl_happy", "🎉"),
   ("crawl", "🐾"),
+  ("gait_forward", "🏃"),  # scripts/gait_real_clip.py: the fast scripted crawl, 3 cycles
 )
 TITLES = {
   "pushups": "Push-ups",
