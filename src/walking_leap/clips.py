@@ -422,19 +422,24 @@ def main() -> None:
     moved = 1e3 * (motion.qpos[-1, :2] - motion.qpos[0, :2])
     print(name, {"frames": len(motion.qpos), "moved_mm": moved.round(1).tolist()})
   write_gait(hand)
+  write_gait(hand, smooth=True)
 
 
-def write_gait(hand: RealHand) -> Motion:
+def write_gait(hand: RealHand, smooth: bool = False) -> Motion:
   """assets/clips/gait.npz: the scripted crawl's targets (``gait.training_targets``)
   replayed on the real hand's model, with each frame's planned velocity
-  (``command``: forward, left m/s; turn rad/s)."""
+  (``command``: forward, left m/s; turn rad/s). ``smooth``: gait_smooth.npz, planned
+  with gait.SMOOTH_IK (targets under the real loop's 6 rad/s)."""
   from walking_leap import gait
 
-  targets, velocity = gait.training_targets(hand.model)
-  motion = replay("gait", hand, q=targets)
-  save(motion, hand, CLIPS_DIR / "gait.npz", extra={"command": velocity})
+  name = "gait_smooth" if smooth else "gait"
+  targets, velocity = gait.training_targets(
+    hand.model, gait.SMOOTH_IK if smooth else 0.0
+  )
+  motion = replay(name, hand, q=targets)
+  save(motion, hand, CLIPS_DIR / f"{name}.npz", extra={"command": velocity})
   moved = 1e3 * (motion.qpos[-1, :2] - motion.qpos[0, :2])
-  print("gait", {"frames": len(motion.qpos), "moved_mm": moved.round(1).tolist()})
+  print(name, {"frames": len(motion.qpos), "moved_mm": moved.round(1).tolist()})
   return motion
 
 

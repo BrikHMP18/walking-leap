@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import torch
+from mjlab.envs.mdp.actions import JointPositionAction, JointPositionActionCfg
 from mjlab.managers.command_manager import CommandTerm
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.sensor import ContactSensor
@@ -525,9 +526,99 @@ def planned_command(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
   return command.planned_velocity
 
 
+def fallen_flag(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
+  """1 while the hand is fallen (``GaitMotionCommand.fallen``), shape (envs, 1): which
+  teacher a two-teacher student copies (runner.SwitchTeacher)."""
+  command = cast(GaitMotionCommand, env.command_manager.get_term(command_name))
+  return command.fallen.float()[:, None]
+
+
+def velocity_command_unless_fallen(
+  env: ManagerBasedRlEnv, command_name: str, motion_command: str
+) -> torch.Tensor:
+  """The velocity command (forward m/s, left m/s, turn rad/s), zero while the hand is
+  fallen: what the gait student saw (``planned_command``) and what the keyboard sends."""
+  command = env.command_manager.get_command(command_name)
+  motion = cast(GaitMotionCommand, env.command_manager.get_term(motion_command))
+  return command[:, :3] * (~motion.fallen)[:, None]
+
+
+def commanded_velocity_exp(
+  env: ManagerBasedRlEnv,
+  command_name: str,
+  motion_command: str,
+  std_lin: float,
+  std_yaw: float,
+) -> torch.Tensor:
+  """``planned_velocity_exp`` for a velocity command: the mean of exp(-(e / std)^2) for
+  the horizontal velocity in the palm's heading frame (m/s) and the turn rate (rad/s).
+  Zero while fallen."""
+  command = env.command_manager.get_command(command_name)
+  motion = cast(GaitMotionCommand, env.command_manager.get_term(motion_command))
+  asset: Entity = env.scene[motion.cfg.entity_name]
+  heading = yaw_quat(asset.data.root_link_quat_w)
+  velocity = quat_apply_inverse(heading, asset.data.root_link_lin_vel_w)[:, :2]
+  lin = torch.sum((velocity - command[:, :2]) ** 2, dim=-1) / std_lin**2
+  yaw = (asset.data.root_link_ang_vel_w[:, 2] - command[:, 2]) ** 2 / std_yaw**2
+  return 0.5 * (torch.exp(-lin) + torch.exp(-yaw)) * (~motion.fallen).float()
+
+
+def not_fallen(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
+  """1 while the hand is up by the command's own test (``GaitMotionCommand.fallen``)."""
+  command = cast(GaitMotionCommand, env.command_manager.get_term(command_name))
+  return (~command.fallen).float()
+
+
 def fallen_too_long(
   env: ManagerBasedRlEnv, command_name: str, limit_s: float
 ) -> torch.Tensor:
   """The hand has been fallen for more than ``limit_s`` (s)."""
   command = cast(GaitMotionCommand, env.command_manager.get_term(command_name))
   return command.fallen_steps.float() * env.step_dt > limit_s
+
+
+##
+# The real hand's driver, in simulation.
+##
+
+
+@dataclass(kw_only=True)
+class SlewJointPositionActionCfg(JointPositionActionCfg):
+  """Joint position targets whose servo setpoint moves at most ``max_rate`` (rad/s),
+  as the repo's LEAP driver moves it (real/leap_hand: 0.05 rad a 100 Hz tick, so
+  5 rad/s), starting from where the joints are at a reset (the driver sets the goal to
+  where the hand is). A policy trained with it sees on the real hand the setpoints it
+  learned with."""
+
+  max_rate: float = 5.0
+
+  def build(self, env: ManagerBasedRlEnv) -> SlewJointPositionAction:
+    return SlewJointPositionAction(self, env)
+
+
+class SlewJointPositionAction(JointPositionAction):
+  def __init__(self, cfg: SlewJointPositionActionCfg, env: ManagerBasedRlEnv):
+    super().__init__(cfg=cfg, env=env)
+    self._max_step = cfg.max_rate * env.physics_dt  # rad per physics step
+    self._setpoint = torch.zeros_like(self._raw_actions)
+    self._fresh = torch.ones(self.num_envs, dtype=torch.bool, device=self.device)
+
+  @property
+  def setpoint(self) -> torch.Tensor:
+    """The servo setpoint now (rad, motor side)."""
+    return self._setpoint
+
+  def apply_actions(self) -> None:
+    encoder_bias = self._entity.data.encoder_bias[:, self._target_ids]
+    want = self._processed_actions - encoder_bias
+    if self._fresh.any():
+      here = self._entity.data.joint_pos[:, self._target_ids] - encoder_bias
+      self._setpoint[self._fresh] = here[self._fresh]
+      self._fresh[:] = False
+    step = torch.clamp(want - self._setpoint, -self._max_step, self._max_step)
+    self._setpoint += step
+    self._entity.set_joint_position_target(self._setpoint, joint_ids=self._target_ids)
+
+  def reset(self, env_ids: torch.Tensor | slice | None = None) -> None:
+    super().reset(env_ids)
+    self._fresh[slice(None) if env_ids is None else env_ids] = True

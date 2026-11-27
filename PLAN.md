@@ -209,6 +209,13 @@ The trainings below that are checked come from a branch, not from this milestone
   - [ ] A keyboard-velocity policy that walks fast, takes pushes and gets up
         (docs/velocity_policy.md): teachers Gait-v2 and Getup-v0, a student of both, PPO
         on the student's own task; the panel's velocity mode (W A S D Q E held)
+    - [x] The four tasks, the driver's setpoint limit in simulation
+          (`mdp.SlewJointPositionActionCfg`), gait_smooth.npz; tests
+          `test_keyboard_velocity_tasks_fit_together`,
+          `test_slew_action_moves_the_setpoint_at_the_drivers_rate`,
+          `test_gait_file_is_up_to_date[gait_smooth]`; 10-iteration smoke runs of each
+          stage chained (teachers -> student -> PPO -> export)
+    - [ ] Train them on Modal and pass each stage's check
   - [ ] A velocity-command student: distill v1 (teacher, given the planner's
         reference for a commanded velocity) into a policy that sees only the command,
         encoders and IMU, then fine-tune it with PPO on velocity tracking

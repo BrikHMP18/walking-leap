@@ -261,13 +261,18 @@ def test_gait_commands_move_the_plan(crawler, name):
   assert abs(turned - turn) < np.radians(2.0)
 
 
-def test_gait_file_is_up_to_date():
-  """assets/clips/gait.npz is gait.py's crawl replayed on the real hand's model, and
-  the hand stays up for all of it."""
+@pytest.mark.parametrize("name", ["gait", "gait_smooth"])
+def test_gait_file_is_up_to_date(name):
+  """assets/clips/gait.npz (and gait_smooth.npz, planned with gait.SMOOTH_IK) is
+  gait.py's crawl replayed on the real hand's model, and the hand stays up for all of
+  it. The smooth one's targets stay under the real loop's 6 rad/s."""
   hand = clips.RealHand()
-  targets, velocity = gait.training_targets(hand.model)
-  motion = clips.replay("gait", hand, q=targets)
-  saved = np.load(clips.CLIPS_DIR / "gait.npz")
+  smooth = gait.SMOOTH_IK if name == "gait_smooth" else 0.0
+  targets, velocity = gait.training_targets(hand.model, smooth)
+  if smooth:
+    assert np.abs(np.diff(targets, axis=0)).max() / gait.KEYFRAME_S < 6.0
+  motion = clips.replay(name, hand, q=targets)
+  saved = np.load(clips.CLIPS_DIR / f"{name}.npz")
   assert saved["fps"][0] == clips.FPS and len(saved["joint_pos"]) == len(motion.qpos)
   assert np.allclose(saved["joint_pos"], motion.qpos[:, 7:], atol=2e-3)
   assert np.allclose(saved["command"], velocity, atol=1e-6)  # planned velocity
@@ -417,5 +422,50 @@ def test_gait_student_runner_takes_a_ppo_teacher_and_plays_the_student(tmp_path)
       assert torch.allclose(
         player.get_inference_policy(DEVICE)(x), runner.alg.student(x)
       )
+  finally:
+    env.close()
+
+
+GAIT_V2_TASK = "Walking-Leap-Motion-Gait-Flat-v2"
+GETUP_TASK = "Walking-Leap-Motion-Gait-Flat-Getup-v0"
+STUDENT_V1_TASK = "Walking-Leap-Motion-Gait-Flat-Student-v1"
+VELOCITY_TASK = "Walking-Leap-Motion-Gait-Flat-Velocity-v0"
+
+
+def test_keyboard_velocity_tasks_fit_together():
+  """Gait-v2 continues from Gait-v1; the two-teacher student's groups are those
+  teachers' actors; the velocity task's actor is the student, so it continues from it.
+  Getup and the student never see the clip."""
+  v1, v2 = load_env_cfg(GAIT_V1_TASK), load_env_cfg(GAIT_V2_TASK)
+  getup, student = load_env_cfg(GETUP_TASK), load_env_cfg(STUDENT_V1_TASK)
+  velocity = load_env_cfg(VELOCITY_TASK)
+  actor = list(v1.observations["actor"].terms)
+  assert list(v2.observations["actor"].terms) == actor
+  assert list(student.observations["teacher"].terms) == actor
+  getup_actor = list(getup.observations["actor"].terms)
+  assert not any(t.startswith("reference") for t in getup_actor)
+  assert list(student.observations["teacher_getup"].terms) == getup_actor
+  for cfg, group in ((student, "student"), (velocity, "actor")):
+    g = cfg.observations[group]
+    assert list(g.terms) == ["command", *getup_actor] and g.history_length == 5
+  assert not any(n.startswith(("body_", "palm_")) for n in velocity.rewards)
+
+
+def test_slew_action_moves_the_setpoint_at_the_drivers_rate():
+  """Targets asked to jump far: the servo setpoint follows at 5 rad/s at most (the real
+  driver's 0.05 rad a 100 Hz tick)."""
+  cfg = load_env_cfg(GAIT_V2_TASK, play=True)
+  cfg.scene.num_envs = 2
+  env = ManagerBasedRlEnv(cfg, device=DEVICE)
+  try:
+    env.reset()
+    term = env.action_manager.get_term("joint_pos")
+    limit = term.cfg.max_rate * env.step_dt + 1e-5
+    env.step(torch.zeros(2, 16, device=DEVICE))
+    for sign in (1.0, -1.0, 1.0):
+      before = term.setpoint.clone()
+      env.step(torch.full((2, 16), 50.0 * sign, device=DEVICE))
+      moved = (term.setpoint - before).abs()
+      assert moved.max() <= limit and moved.max() > 0.5 * limit
   finally:
     env.close()

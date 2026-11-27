@@ -136,3 +136,30 @@ def walking_leap_gait_student_runner_cfg() -> RslRlDistillationRunnerCfg:
     wandb_project=ppo.wandb_project,
     upload_model=False,
   )
+
+
+def walking_leap_two_teacher_runner_cfg() -> RslRlDistillationRunnerCfg:
+  """The student of Gait-v2 and Getup (``runner.SwitchTeacher``): the teacher is both
+  PPO actors (same network each), loaded from scripts/merge_teachers.py's file."""
+  cfg = walking_leap_gait_student_runner_cfg()
+  return replace(
+    cfg,
+    teacher=replace(cfg.teacher, class_name="walking_leap.runner:SwitchTeacher"),
+    obs_groups={
+      "student": ("student",),
+      "teacher": ("teacher", "teacher_getup", "fallen"),
+    },
+    max_iterations=1_000,
+  )
+
+
+def walking_leap_velocity_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+  """PPO on the student's own task, continuing from the two-teacher student
+  (``runner.StudentPpoRunner``): the actor is the student's network; a gentler start
+  (learning rate 3e-4) so that a fresh critic does not undo the distillation."""
+  ppo = walking_leap_crawl_ppo_runner_cfg()
+  return replace(
+    ppo,
+    algorithm=replace(ppo.algorithm, learning_rate=3e-4),
+    max_iterations=1_500,
+  )

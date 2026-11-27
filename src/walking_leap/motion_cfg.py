@@ -420,7 +420,13 @@ def walking_leap_motion_env_cfg(
 FALLEN_START_PROB = 0.2
 
 
-def walking_leap_gait_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+def walking_leap_gait_env_cfg(
+  play: bool = False,
+  clip: str = "gait",
+  fallen_start_prob: float = FALLEN_START_PROB,
+  push: dict[str, tuple[float, float]] | None = None,
+  slew: bool = False,
+) -> ManagerBasedRlEnvCfg:
   """Imitate the scripted crawl (assets/clips/gait.npz) and survive: the real hand
   with the IMU, everything random of ``robust`` and the cables, and falls. A fall
   no longer ends an episode: the clip waits while the hand is down and resumes where
@@ -428,12 +434,14 @@ def walking_leap_gait_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   rewards for an upright palm at the clip's height, and for moving as the plan
   intends (``mdp.planned_velocity_exp``), which the slipping replay undershoots.
   Observations are those of ``Walking-Leap-Motion-Gait-Flat-v0``, so training can
-  continue from its checkpoints."""
+  continue from its checkpoints. ``clip``, ``fallen_start_prob``, ``push`` (the pushes'
+  velocity range) and ``slew`` (``mdp.SlewJointPositionActionCfg``, the real driver's
+  setpoint limit) are for Gait-v2 and Getup; the defaults are Gait-v1."""
   cfg = walking_leap_motion_env_cfg(
     play=play,
     robust=True,
     cables=True,
-    clip="gait",
+    clip=clip,
     feet=False,
     stiffness=MEASURED_STIFFNESS,
     torsion=TORSION,
@@ -442,8 +450,15 @@ def walking_leap_gait_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   old = cfg.commands["motion"]
   cfg.commands["motion"] = mdp.GaitMotionCommandCfg(
     **{f.name: getattr(old, f.name) for f in fields(old) if f.init},
-    fallen_start_prob=0.0 if play else FALLEN_START_PROB,
+    fallen_start_prob=0.0 if play else fallen_start_prob,
   )
+  if push is not None and "push" in cfg.events:
+    cfg.events["push"].params["velocity_range"] = push
+  if slew:
+    old_action = cfg.actions["joint_pos"]
+    cfg.actions["joint_pos"] = mdp.SlewJointPositionActionCfg(
+      **{f.name: getattr(old_action, f.name) for f in fields(old_action) if f.init}
+    )
   for name in ("palm_height", "palm_tilt", "foot_height"):
     del cfg.terminations[name]
   cfg.terminations["fallen_too_long"] = TerminationTermCfg(
@@ -460,6 +475,64 @@ def walking_leap_gait_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   )
   if not play:
     cfg.episode_length_s = 15.0
+  return cfg
+
+
+# Gait-v2's pushes: a hand holding its stance did not fall from 0.3 m/s; 0.5 m/s felled
+# 22 % of them (scripts/eval_survival.py). Training's 0.1 m/s (PUSH_RANGE) did nothing.
+STRONG_PUSH_RANGE = {**PUSH_RANGE, "x": (-0.4, 0.4), "y": (-0.4, 0.4)}
+
+
+def walking_leap_gait_v2_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+  """Gait-v1 on gait_smooth.npz (targets under the real loop's 6 rad/s), with the real
+  driver's setpoint limit, pushes up to 0.4 m/s per axis and no fallen starts (getting
+  up is Getup's). Same observations as v0/v1: it continues from Gait-v1."""
+  return walking_leap_gait_env_cfg(
+    play=play,
+    clip="gait_smooth",
+    fallen_start_prob=0.0,
+    push=STRONG_PUSH_RANGE,
+    slew=True,
+  )
+
+
+GETUP_EPISODE_S = 6.0
+
+
+def walking_leap_getup_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+  """Getting up: Gait-v2's hand (randomized, cables, strong pushes, the driver's
+  setpoint limit), every episode started fallen (``GaitMotionCommandCfg``: 57-115 deg
+  about a random horizontal axis, from 0.16 m). The actor sees the IMU, the encoders and
+  its last action, never the clip. Rewarded for being up (the command's own test:
+  palm within 17 deg of upright and above 9 cm for 0.3 s), an upright palm and the
+  clip's palm height; the clip's tracking rewards are gone (once up, the hand is to
+  stand, and the walking teacher takes over in the student)."""
+  cfg = walking_leap_gait_env_cfg(
+    play=play,
+    clip="gait_smooth",
+    fallen_start_prob=1.0,
+    push=STRONG_PUSH_RANGE,
+    slew=True,
+  )
+  for name in ("reference_joints", "reference_gravity"):
+    del cfg.observations["actor"].terms[name]
+  for name in (
+    "palm_position",
+    "palm_orientation",
+    "body_position",
+    "body_orientation",
+    "body_lin_vel",
+    "body_ang_vel",
+    "planned_velocity",
+  ):
+    del cfg.rewards[name]
+  motion = {"command_name": "motion"}
+  cfg.rewards["up"] = RewardTermCfg(func=mdp.not_fallen, weight=2.0, params=motion)
+  cfg.rewards["stand_height"].weight = 1.0
+  if play:
+    cfg.commands["motion"].fallen_start_prob = 1.0
+  else:
+    cfg.episode_length_s = GETUP_EPISODE_S
   return cfg
 
 
@@ -494,4 +567,120 @@ def walking_leap_gait_student_env_cfg(play: bool = False) -> ManagerBasedRlEnvCf
     ),
     "teacher": teacher,
   }
+  return cfg
+
+
+TWO_TEACHER_FALLEN_PROB = 0.3
+
+
+def walking_leap_two_teacher_student_env_cfg(
+  play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+  """The keyboard-velocity student of two teachers (docs/velocity_policy.md, stage 2):
+  Gait-v2's hand (smooth clip, the driver's setpoint limit, strong pushes) with
+  ``TWO_TEACHER_FALLEN_PROB`` of the episodes started fallen. Groups: ``student`` (as
+  Student-v0: the plan's velocity, IMU, encoders, last action, 5 steps), ``teacher``
+  (Gait-v2's actor), ``teacher_getup`` (Getup's actor) and ``fallen`` (which teacher
+  answers: runner.SwitchTeacher)."""
+  cfg = walking_leap_gait_env_cfg(
+    play=play,
+    clip="gait_smooth",
+    fallen_start_prob=TWO_TEACHER_FALLEN_PROB,
+    push=STRONG_PUSH_RANGE,
+    slew=True,
+  )
+  teacher = cfg.observations.pop("actor")
+  del cfg.observations["critic"]
+  motion = {"command_name": "motion"}
+  proprio = {
+    name: replace(term)
+    for name, term in teacher.terms.items()
+    if not name.startswith("reference_")
+  }
+  cfg.observations = {
+    "student": ObservationGroupCfg(
+      terms={
+        "command": ObservationTermCfg(func=mdp.planned_command, params=motion),
+        **{name: replace(term) for name, term in proprio.items()},
+      },
+      enable_corruption=teacher.enable_corruption,
+      history_length=STUDENT_HISTORY,
+    ),
+    "teacher": teacher,
+    "teacher_getup": ObservationGroupCfg(
+      terms=proprio, enable_corruption=teacher.enable_corruption
+    ),
+    "fallen": ObservationGroupCfg(
+      terms={"fallen": ObservationTermCfg(func=mdp.fallen_flag, params=motion)},
+      enable_corruption=False,
+    ),
+  }
+  return cfg
+
+
+# Stage 3: keyboard commands as the student will get them. The gait clip's commands
+# per cycle (gait.npz): forward 28, back 20, left 15, right 8 mm/s, turns 19 deg/s.
+KEYS_LIN_VEL_X = (-0.02, 0.03)  # m/s
+KEYS_LIN_VEL_Y = (-0.01, 0.015)  # m/s
+KEYS_ANG_VEL_Z = (-0.33, 0.33)  # rad/s
+KEYS_STANDING = 0.15  # share of commands that stand still
+KEYS_RESAMPLING_S = (0.5, 3.0)  # a key pressed or released at any phase of a cycle
+
+
+def walking_leap_velocity_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+  """The student's own task (docs/velocity_policy.md, stage 3), for PPO continuing from
+  the two-teacher student: random velocity commands over the keys' range, combined,
+  changed every 0.5-3 s, standing still 15 % of the time; the actor sees exactly the
+  student's inputs (the command zero while fallen). Rewards for the commanded velocity,
+  being up, an upright palm and the stance's height; the clip only times falls and
+  fallen starts (``TWO_TEACHER_FALLEN_PROB``), no tracking reward."""
+  cfg = walking_leap_two_teacher_student_env_cfg(play=play)
+  student = cfg.observations["student"]
+  critic_terms = {
+    name: replace(term) for name, term in cfg.observations["teacher"].terms.items()
+  }
+  student.terms["command"] = ObservationTermCfg(
+    func=mdp.velocity_command_unless_fallen,
+    params={"command_name": "twist", "motion_command": "motion"},
+  )
+  critic_terms["command"] = replace(student.terms["command"])
+  critic_terms["base_lin_vel"] = ObservationTermCfg(func=envs_mdp.base_lin_vel)
+  critic_terms["fallen"] = replace(cfg.observations["fallen"].terms["fallen"])
+  cfg.observations = {
+    "actor": student,
+    "critic": ObservationGroupCfg(terms=critic_terms, enable_corruption=False),
+  }
+  cfg.commands["twist"] = mdp.VelocityCommandCfg(
+    entity_name="robot",
+    resampling_time_range=KEYS_RESAMPLING_S,
+    heading_command=False,
+    rel_standing_envs=KEYS_STANDING,
+    rel_heading_envs=0.0,
+    debug_vis=True,
+    ranges=mdp.VelocityCommandCfg.Ranges(
+      lin_vel_x=KEYS_LIN_VEL_X, lin_vel_y=KEYS_LIN_VEL_Y, ang_vel_z=KEYS_ANG_VEL_Z
+    ),
+  )
+  for name in (
+    "palm_position",
+    "palm_orientation",
+    "body_position",
+    "body_orientation",
+    "body_lin_vel",
+    "body_ang_vel",
+    "planned_velocity",
+  ):
+    del cfg.rewards[name]
+  motion = {"command_name": "motion"}
+  cfg.rewards["commanded_velocity"] = RewardTermCfg(
+    func=mdp.commanded_velocity_exp,
+    weight=2.0,
+    params={
+      "command_name": "twist",
+      "motion_command": "motion",
+      "std_lin": 0.01,
+      "std_yaw": 0.15,
+    },
+  )
+  cfg.rewards["up"] = RewardTermCfg(func=mdp.not_fallen, weight=1.0, params=motion)
   return cfg

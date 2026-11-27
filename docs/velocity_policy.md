@@ -43,6 +43,20 @@ drifts, and keeping a long walk up is the policy's job.
 
 ## The plan: two teachers, one student, then RL
 
+Tasks (all on Gait-v2's hand: the smooth clip, randomization, cables, pushes up to
+0.4 m/s per axis, and `mdp.SlewJointPositionActionCfg`, which moves the servo setpoint at
+5 rad/s at most as the real driver does):
+
+| Stage | Task | Learns | From |
+| --- | --- | --- | --- |
+| 1a | `Walking-Leap-Motion-Gait-Flat-v2` | imitate the smooth clip under strong pushes | Gait-v1 |
+| 1b | `Walking-Leap-Motion-Gait-Flat-Getup-v0` | get up (every episode starts fallen; IMU and encoders only) | scratch |
+| 2 | `Walking-Leap-Motion-Gait-Flat-Student-v1` | copy Getup while fallen, Gait-v2 otherwise (`runner.SwitchTeacher`; teachers merged by `scripts/merge_teachers.py`), 30 % fallen starts | the merged teachers |
+| 3 | `Walking-Leap-Motion-Gait-Flat-Velocity-v0` | random keyboard commands (combined, changed every 0.5-3 s, 15 % standing), getting up, pushes; PPO on the student's network (`runner.StudentPpoRunner`) | Student-v1 |
+
+`real/export_policy.py` exports a Student-v1 or a Velocity-v0 checkpoint as a velocity
+policy (285 inputs) for the panel and the loop.
+
 Every stage ends on a check with the scripts above (metrics independent of the reward);
 a stage that misses its check stops the plan there.
 

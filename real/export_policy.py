@@ -147,6 +147,14 @@ def main() -> int:
   if "student_state_dict" in saved:
     cr = None if a.command_range is None else np.reshape(a.command_range, (3, 2))
     return export_velocity(saved["student_state_dict"], out, cr)
+  from walking_leap.motion_cfg import STUDENT_HISTORY
+
+  actor = saved.get("actor_state_dict", {})
+  if actor.get("obs_normalizer._mean", torch.zeros(1, 0)).shape[-1] == STUDENT_HISTORY * 57:
+    # PPO continued from a student (Walking-Leap-Motion-Gait-Flat-Velocity-v0): its actor
+    # is the student's network, on the student's 285 inputs.
+    cr = None if a.command_range is None else np.reshape(a.command_range, (3, 2))
+    return export_velocity(actor, out, cr)
   if not (a.tracker and a.clips) and not (a.motion and a.clip):
     ap.error("a motion policy needs --motion and --clip (a tracker: --tracker --clips)")
   d = saved["actor_state_dict"]

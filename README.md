@@ -130,6 +130,7 @@ scripts/
   eval_survival.py     Gait-v1 and its student: getting up, and kicks, next to a still hand
   steer_student.py     The velocity student from the keyboard, in the MuJoCo viewer
   gait_real_clip.py    The smooth scripted crawl as a clip for the real loop and panel
+  merge_teachers.py    Two PPO checkpoints -> the two-teacher student's teacher
 PLAN.md            Roadmap and verified progress
 AGENTS.md          Conventions for contributors and coding agents
 ```
@@ -171,6 +172,10 @@ and reward terms; motion tasks use the as-built hand, see "Animations"):
 | `Walking-Leap-Motion-Gait-Flat-v0` | real hand, imitate the scripted crawl of `gait.py`: cycles of forward 30 mm, back 20, left 15, right 8, turns 20°, stand, 150 at random (159 s); nothing random | 89: encoders + palm IMU + the reference |
 | `Walking-Leap-Motion-Gait-Flat-v1` | as Gait-v0, with everything random of Motion-v1, pushes, cables and falls: a fall no longer ends the episode, the clip waits and resumes where the hand gets up, a fifth of the episodes start fallen (57-115° tilt); rewards for an upright palm and for moving as planned | 89 (as v0: it can continue v0's checkpoints) |
 | `Walking-Leap-Motion-Gait-Flat-Student-v0` | as Gait-v1, for a teacher-student distillation: a v1 checkpoint (the teacher, loaded with `--agent.resume`) acts on the clip, the student copies its actions without the clip | 285: the plan's velocity as command (3) + palm IMU (6) + encoders (32) + last action (16), over 5 steps |
+| `Walking-Leap-Motion-Gait-Flat-v2` | as Gait-v1 on the smooth clip (gait_smooth.npz), the real driver's setpoint limit (5 rad/s), pushes up to 0.4 m/s per axis, no fallen starts | 89 (as v1: it continues v1) |
+| `Walking-Leap-Motion-Gait-Flat-Getup-v0` | Gait-v2's hand, every episode started fallen; rewarded for getting up and standing | 54: encoders + palm IMU + last action |
+| `Walking-Leap-Motion-Gait-Flat-Student-v1` | the keyboard-velocity student of Gait-v2 (standing) and Getup (fallen) | 285, as Student-v0 |
+| `Walking-Leap-Motion-Gait-Flat-Velocity-v0` | PPO on the student's own task: random keyboard commands, getting up, pushes (docs/velocity_policy.md) | 285, as Student-v0 |
 
 Visualize the environment without a policy (`--viewer native` opens a MuJoCo
 window; `--viewer viser` serves a web viewer at http://localhost:8080):
@@ -423,7 +428,7 @@ rsync -av <cluster>:<repository path>/logs/rsl_rl/ logs/rsl_rl/
 ## Tests
 
 ```sh
-uv run pytest                              # 154 tests: 26 robot/physics, 41 clips and environments, 87 real hand (recordings, loop, driver, panel, IMU reader)
+uv run pytest                              # 159 tests: 26 robot/physics, 44 clips and environments, 89 real hand (recordings, loop, driver, panel, IMU reader)
 CUDA_VISIBLE_DEVICES="" uv run pytest      # CPU only (~5 min)
 uv run ruff check src tests scripts && uv run ruff format --check src tests scripts
 uv run python scripts/render_media.py      # regenerate docs/media/

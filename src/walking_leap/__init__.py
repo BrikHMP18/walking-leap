@@ -12,6 +12,8 @@ from walking_leap.agent_cfg import (
   walking_leap_motion_ppo_runner_cfg,
   walking_leap_ppo_runner_cfg,
   walking_leap_real_ppo_runner_cfg,
+  walking_leap_two_teacher_runner_cfg,
+  walking_leap_velocity_ppo_runner_cfg,
 )
 from walking_leap.env_cfg import (
   walking_leap_flat_env_cfg,
@@ -21,10 +23,14 @@ from walking_leap.env_cfg import (
 from walking_leap.motion_cfg import (
   walking_leap_gait_env_cfg,
   walking_leap_gait_student_env_cfg,
+  walking_leap_gait_v2_env_cfg,
+  walking_leap_getup_env_cfg,
   walking_leap_motion_env_cfg,
+  walking_leap_two_teacher_student_env_cfg,
+  walking_leap_velocity_env_cfg,
 )
 from walking_leap.robot import MEASURED_STIFFNESS, TORSION
-from walking_leap.runner import GaitStudentRunner
+from walking_leap.runner import GaitStudentRunner, StudentPpoRunner
 
 register_mjlab_task(
   task_id="Walking-Leap-Flat-v0",
@@ -111,4 +117,44 @@ register_mjlab_task(
   play_env_cfg=walking_leap_gait_student_env_cfg(play=True),
   rl_cfg=walking_leap_gait_student_runner_cfg(),
   runner_cls=GaitStudentRunner,
+)
+
+# The walking teacher for the keyboard-velocity policy (docs/velocity_policy.md): Gait-v1
+# on the smooth clip (gait_smooth.npz: targets the real loop accepts), with the real
+# driver's setpoint limit and pushes up to 0.4 m/s per axis; continues from Gait-v1.
+register_mjlab_task(
+  task_id="Walking-Leap-Motion-Gait-Flat-v2",
+  env_cfg=walking_leap_gait_v2_env_cfg(),
+  play_env_cfg=walking_leap_gait_v2_env_cfg(play=True),
+  rl_cfg=walking_leap_crawl_ppo_runner_cfg(),
+  runner_cls=MotionTrackingOnPolicyRunner,
+)
+
+# The getting-up teacher: every episode starts fallen; IMU and encoders only.
+register_mjlab_task(
+  task_id="Walking-Leap-Motion-Gait-Flat-Getup-v0",
+  env_cfg=walking_leap_getup_env_cfg(),
+  play_env_cfg=walking_leap_getup_env_cfg(play=True),
+  rl_cfg=walking_leap_motion_ppo_runner_cfg(),
+  runner_cls=MotionTrackingOnPolicyRunner,
+)
+
+# The keyboard-velocity student of Gait-v2 (standing) and Getup (fallen): pass the merged
+# teachers (scripts/merge_teachers.py) with --agent.resume.
+register_mjlab_task(
+  task_id="Walking-Leap-Motion-Gait-Flat-Student-v1",
+  env_cfg=walking_leap_two_teacher_student_env_cfg(),
+  play_env_cfg=walking_leap_two_teacher_student_env_cfg(play=True),
+  rl_cfg=walking_leap_two_teacher_runner_cfg(),
+  runner_cls=GaitStudentRunner,
+)
+
+# PPO on the student's own task: random keyboard commands (combined, changed any time),
+# getting up, pushes; continues from Student-v1 (--agent.resume on its checkpoint).
+register_mjlab_task(
+  task_id="Walking-Leap-Motion-Gait-Flat-Velocity-v0",
+  env_cfg=walking_leap_velocity_env_cfg(),
+  play_env_cfg=walking_leap_velocity_env_cfg(play=True),
+  rl_cfg=walking_leap_velocity_ppo_runner_cfg(),
+  runner_cls=StudentPpoRunner,
 )
