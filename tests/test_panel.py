@@ -157,11 +157,13 @@ def test_a_fake_session_walks_with_a_velocity_policy(tmp_path):
     hi=np.ones(16) * 9, kind="velocity", history=STUDENT_HISTORY,
     command_names=["forward", "forward_left"], command_values=[[0.03, 0, 0], [0.03, 0, 0.3]],
     command_range=[[-0.02, 0.03], [0.0, 0.0], [-0.3, 0.3]],
+    source=json.dumps(dict(run="a_run_s42", checkpoint="model_7.pt")),
   )  # fmt: skip
   pol = server.catalog({"student": str(f)})["policies"]["student"]
   assert pol["kind"] == "velocity" and pol["commands"]["forward"] == [30.0, 0.0, 0.0]
   assert pol["keys"] == {"w": "forward", "q": "forward_left"}
   assert pol["range"] == [[-20.0, 30.0], [0.0, 0.0], [-17.2, 17.2]]
+  assert pol["source"] == "a_run_s42 / model_7.pt"
 
   def wait(cond, s=40):
     t0 = time.monotonic()
@@ -205,3 +207,79 @@ def test_a_fake_session_walks_with_a_velocity_policy(tmp_path):
   texts = [e[2] for e in s.events]
   assert "steer: forward" in texts and any(t.startswith("steer: done") for t in texts)
   assert texts[-1] == "torque off"
+
+
+def test_the_last_abort_stays_until_the_next_connection():
+  """The page keeps the guard that stopped the hand on screen: an ABORT (or a session
+  ended on an error) is kept through later events, a new connection clears it."""
+  s = server.Session("fake", (1200, 0, 600), {})
+  s.event("torque on, lying, 22-24 C")
+  assert s.status()["last_abort"] is None
+  s.event("ABORT: rf_mcp at its current limit for 1.5 s -> hold, then torque off")
+  s.event("torque off")
+  last = s.status()["last_abort"]
+  assert last["text"].startswith("ABORT: rf_mcp") and last["id"] == 2
+  assert s.start()[0] and s.status()["last_abort"] is None
+  t0 = time.monotonic()
+  while s.state != "on" and time.monotonic() - t0 < 40:
+    time.sleep(0.05)
+  assert s.stop()[0]
+  s.thread.join(40)
+  assert s.state == "off"
+
+
+def test_the_panel_names_its_commit_and_who_has_its_port(monkeypatch, capsys):
+  """The page shows the commit the server runs; a taken port is explained, not a
+  traceback (an ssh tunnel started on the hand's PC once took it)."""
+  import socket
+
+  commit = server.repo_commit()
+  assert commit and all(c in "0123456789abcdef" for c in commit)
+  with socket.socket() as taken:
+    taken.bind(("127.0.0.1", 0))
+    taken.listen()
+    port = taken.getsockname()[1]
+    monkeypatch.setattr(sys, "argv", ["server.py", "--fake", "--port", str(port)])
+    assert server.main() == 1
+  assert f"port {port} is taken" in capsys.readouterr().err
+
+
+def test_exported_policies_are_named_and_keep_their_ranges(tmp_path):
+  """export_policy names a file after its run's task, seed and iteration, records where
+  it came from, and reads the velocity ranges the run trained on from its params/env.yaml
+  (mjlab's Python tags read safely); a run without them gets none (keys only)."""
+  import export_policy
+
+  run = "2026-11-27_02-50-07_Walking-Leap-Motion-Gait-Flat-Velocity-v0_s42"
+  assert (
+    export_policy.default_name(f"outputs/hf/runs/{run}/model_1200.pt")
+    == "Motion-Gait-Flat-Velocity-v0_s42_it1200"
+  )
+  assert export_policy.default_name("runs/2026-11-25_11-43-22/model_2999.pt") == (
+    "2026-11-25_11-43-22_it2999"
+  )
+  source = json.loads(export_policy.source_of(f"outputs/hf/runs/{run}/model_1200.pt"))
+  assert source["run"] == run and source["checkpoint"] == "model_1200.pt"
+
+  params = tmp_path / run / "params"
+  params.mkdir(parents=True)
+  (params / "env.yaml").write_text(
+    "commands:\n"
+    "  motion:\n"
+    "    class_type: !!python/name:walking_leap.mdp.GaitMotionCommand ''\n"
+    "  twist:\n"
+    "    resampling_time_range: !!python/tuple\n    - 0.5\n    - 3.0\n"
+    "    ranges:\n"
+    "      lin_vel_x: !!python/tuple\n      - -0.02\n      - 0.03\n"
+    "      lin_vel_y: !!python/tuple\n      - -0.01\n      - 0.015\n"
+    "      ang_vel_z: !!python/tuple\n      - -0.33\n      - 0.33\n"
+    "scene:\n"
+    "  joints: !!python/object/apply:builtins.slice\n  - 0\n  - 3\n  - null\n"
+  )
+  np.testing.assert_allclose(
+    export_policy.trained_command_range(str(tmp_path / run)),
+    [[-0.02, 0.03], [-0.01, 0.015], [-0.33, 0.33]],
+  )
+  (params / "env.yaml").write_text("commands:\n  motion:\n    debug_vis: false\n")
+  assert export_policy.trained_command_range(str(tmp_path / run)) is None
+  assert export_policy.trained_command_range(str(tmp_path / "no_such_run")) is None

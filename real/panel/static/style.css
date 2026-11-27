@@ -32,6 +32,15 @@ header {
 .chip { padding: 4px 10px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .6px; }
 .chip.accent { color: var(--accent); border-color: rgba(76,194,255,.4); text-transform: none; letter-spacing: 0; }
 .chip.real { color: var(--warn); border-color: rgba(255,176,32,.5); }
+.chip.commit { text-transform: none; letter-spacing: 0; font-family: ui-monospace, monospace; }
+.chip.commit.stale { color: var(--warn); border-color: rgba(255,176,32,.5); }
+.alert {
+  margin: 12px 20px 0; padding: 10px 14px; border-radius: 12px;
+  background: #2a1014; border: 1px solid var(--bad);
+  display: flex; gap: 12px; align-items: center; justify-content: space-between;
+}
+.alert b { color: var(--bad); }
+.src { color: var(--muted); font-size: 12px; margin-top: 6px; overflow-wrap: anywhere; }
 .actions { display: flex; gap: 8px; }
 .btn { padding: 8px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); transition: .15s; }
 .btn:hover:not(:disabled) { border-color: #36404f; background: #1b2130; }

@@ -29,6 +29,36 @@ function toast(text, bad) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (t.className = ''), 2600);
 }
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+// What each guard of wlc.Control.guard means, for the stop banner.
+const ABORT_HINTS = [
+  [/current limit/, 'A motor stayed at its 350 mA cap for 1.5 s: pushed too hard, or blocked.'],
+  [/^ABORT: tilt \d+ deg/, 'The palm tilted past 40°.'],
+  [/away from the sim/, 'The palm\'s "down" left the clip\'s by more than 15°.'],
+  [/motor error/, 'A servo reported a hardware error (overload?). If it repeats, power-cycle the hand.'],
+  [/IMU is silent/, 'No IMU reading for 60 ms: check its cable.'],
+  [/motors are silent/, 'No motor reading for 0.1 s: check the U2D2 and the power.'],
+  [/too tilted to lie down/, 'Tilted more than 15°: it held, then let go instead of lying down.'],
+];
+let dismissedAbort = null;
+function showAbort() {
+  const a = S.last_abort;
+  $('alert').hidden = !a || a.id === dismissedAbort;
+  if (!a) return;
+  const hint = (ABORT_HINTS.find(([re]) => re.test(a.text)) || [null, ''])[1];
+  const what = a.text.replace(/ -> hold, then torque off$/, '');
+  $('alert-text').innerHTML = `<b>Stopped</b> at ${new Date(a.t * 1000).toLocaleTimeString()}: ${esc(what)}.`
+    + (hint ? ` ${esc(hint)}` : '') + ' Torque is off.';
+}
+function showCommit() {
+  const c = $('chip-commit');
+  if (!config.commit) return;
+  const moved = config.disk_commit && config.disk_commit !== config.commit;
+  c.hidden = false;
+  c.textContent = moved ? `code ${config.commit} → ${config.disk_commit}: restart the panel` : config.commit;
+  c.title = moved ? 'The repo changed since this server started (git pull?): restart real/panel/run.' : 'The commit this panel runs';
+  c.classList.toggle('stale', !!moved);
+}
 function confirmBox(text) {
   return new Promise((done) => {
     $('confirm-text').textContent = text;
@@ -410,12 +440,15 @@ function pollGamepad() {  // a gamepad's left stick: the joystick, with a dead z
 function buildSide() {
   const sel = $('policy');
   const all = Object.entries(config.policies);
-  const opt = ([n, p]) => `<option value="${n}">${n} · ${p.kind === 'velocity' ? (p.range ? 'joystick' : 'hold the keys') : p.covers.length + ' clips'}${p.imu ? '' : ' · no IMU'}</option>`;
+  const opt = ([n, p]) => `<option value="${esc(n)}" title="${esc(p.source || 'source not recorded')}">${esc(n)} · ${p.kind === 'velocity' ? (p.range ? 'joystick' : 'hold the keys') : p.covers.length + ' clips'}${p.imu ? '' : ' · no IMU'}</option>`;
   const cycles = all.filter(([, p]) => p.kind !== 'velocity'), walking = all.filter(([, p]) => p.kind === 'velocity');
   sel.innerHTML = '<option value="">No policy · the scripts</option>'
     + (cycles.length ? `<optgroup label="Cycles · one clip per key or emote">${cycles.map(opt).join('')}</optgroup>` : '')
     + (walking.length ? `<optgroup label="Walking · keys or joystick">${walking.map(opt).join('')}</optgroup>` : '');
-  sel.onchange = () => api('policy', { name: sel.value || null, live: false });
+  sel.onchange = async () => {
+    await api('policy', { name: sel.value || null, live: false });
+    sel.blur();  // the next render() shows the server's policy (this one, or the old one if refused)
+  };
   document.querySelectorAll('#seg-live button').forEach((b) => (b.onclick = async () => {
     const live = b.dataset.live === '1';
     if (live && !S.policy) return toast('pick a policy first', true);
@@ -526,6 +559,8 @@ function render() {
         + (S.live ? ' <b style="color:var(--warn)">Live: it walks.</b>' : ' Shadow: the hand holds its stance, the policy is computed and logged.')
       : `Drives (green dot): ${p.covers.map((n) => (config.clips[n] || {}).title || n).join(', ')}. The rest play as written.`
         + (S.live ? ' <b style="color:var(--warn)">Live: its targets go to the motors.</b>' : ' Shadow: computed and logged, the clip is sent.');
+  if (p) $('policy-hint').innerHTML += `<div class="src">From ${esc(p.source || 'an unrecorded run (exported before files kept their source)')}</div>`;
+  showAbort();
   $('queue').textContent = S.queue && S.queue.length ? S.queue.map((n) => (config.clips[n] || {}).title || n).join(' → ') : '–';
   const f = (v, unit, d = 1) => (v === null || v === undefined ? '–' : `${Number(v).toFixed(d)}${unit}`);
   $('hud-tilt').textContent = f(S.tilt, '°');
@@ -557,6 +592,8 @@ function addEvents(list) {
 // ------------------------------------------------------------------ start
 async function main() {
   config = await fetch('/api/config').then((r) => r.json());
+  showCommit();
+  $('alert-x').onclick = () => { dismissedAbort = S.last_abort && S.last_abort.id; showAbort(); };
   buildBars();
   buildSide();
   resize();

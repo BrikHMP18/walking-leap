@@ -17,6 +17,7 @@
       <span class="chip" id="chip-mode">…</span>
       <span class="chip" id="chip-where">…</span>
       <span class="chip accent" id="chip-clip" hidden></span>
+      <span class="chip commit" id="chip-commit" hidden></span>
     </div>
     <div class="actions">
       <button id="btn-connect" class="btn primary">Connect</button>
@@ -26,6 +27,11 @@
       <button id="btn-stop" class="btn stop">STOP <kbd>Esc</kbd></button>
     </div>
   </header>
+
+  <div class="alert" id="alert" hidden>
+    <span id="alert-text"></span>
+    <button class="btn quiet" id="alert-x">OK</button>
+  </div>
 
   <div class="confirm" id="confirm" hidden>
     <span id="confirm-text"></span>
@@ -88,7 +94,7 @@
 
     <div class="row">
       <section class="card map">
-        <div class="card-title">Supposed position <span class="sub">from the plans</span>
+        <div class="card-title">Planned path <span class="sub">from the plans, not measured</span>
           <button class="mini" id="btn-reset-map">reset</button></div>
         <canvas id="map"></canvas>
       </section>

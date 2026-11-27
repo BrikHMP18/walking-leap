@@ -114,9 +114,10 @@ a stage that misses its check stops the plan there.
   - **A command range** (`command_range`, 3 x 2: forward m/s, left m/s, turn rad/s; min,
     max): a joystick on the panel (on screen, or a gamepad's left stick), up/down the
     forward speed and left/right the turn rate at the same time, never outside the range.
-    Export with `real/export_policy.py <run>/model_<it>.pt --command-range FWD_MIN FWD_MAX
-    LEFT_MIN LEFT_MAX TURN_MIN TURN_MAX`. Only for a policy trained on mixed commands
-    inside those ranges (stage 3): the first student has seen one command at a time.
+    `real/export_policy.py <run>/model_<it>.pt` keeps the ranges the run trained on (its
+    `params/env.yaml`): stage 3 and later get the joystick by themselves, the students
+    (one command at a time, no ranges) keys only. `--command-range` overrides them,
+    `--keys-only` drops them.
 - The repo's LEAP driver already moves each setpoint at most 0.05 rad a tick (100 Hz:
   5 rad/s), whatever the policy asks.
 - Walking and pushes run with today's guards. Getting up needs the 40 deg tilt guard

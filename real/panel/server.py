@@ -5,7 +5,12 @@
   uv run python real/panel/server.py --twin   # a simulated hand (the repo's env)
 
 Then open http://localhost:8765. From a laptop: ``ssh -L 8765:localhost:8765 <hand PC>``
-first. It listens on this computer only (``--host`` to change it).
+first, run on the laptop (the same tunnel started on the hand's PC takes the port from the
+panel). It listens on this computer only (``--host`` to change it). The page shows the
+commit the server runs and warns when the repo on disk has moved on (restart it).
+
+The last guard that stopped the hand (an ``ABORT``, or a session that ended on an error)
+stays in ``status()["last_abort"]`` until the next connection: the page keeps it on screen.
 
 The page sends commands; one session thread runs the loop (wlc.Control) with all its
 guards, and plays clips one after the other: stand up, the moves (W S A D Q E), the
@@ -24,10 +29,12 @@ speed, left/right the turn rate, both kept inside that range.
 
 import argparse
 import collections
+import errno
 import json
 import mimetypes
 import os
 import queue
+import subprocess
 import sys
 import threading
 import time
@@ -98,9 +105,30 @@ def stick_command(x, y, command_range):
   return np.clip(np.array([forward, 0.0, turn]), lo, hi)
 
 
+def repo_commit():
+  """The repo's checked-out commit (short hash), or None without git."""
+  try:
+    out = subprocess.run(
+      ["git", "-C", os.path.dirname(os.path.dirname(HERE)), "rev-parse", "--short", "HEAD"],
+      capture_output=True, text=True, timeout=2,
+    )  # fmt: skip
+  except (OSError, subprocess.SubprocessError):
+    return None
+  return out.stdout.strip() or None
+
+
 def policy_kind(path):
   with np.load(path) as d:
     return str(d["kind"]) if "kind" in d.files else "motion"
+
+
+def policy_source(path):
+  """Where an exported policy came from ("<run> / <checkpoint>"), if its file says so."""
+  with np.load(path) as d:
+    if "source" not in d.files:
+      return None
+    s = json.loads(str(d["source"]))
+  return " / ".join(str(s[k]) for k in ("run", "checkpoint") if s.get(k)) or None
 
 
 def load_policy(path):
@@ -177,16 +205,21 @@ class Session:
       None,
       (0.0, None),
     )  # the joystick's command; last logged
+    # The last guard that stopped the hand: (event id, time, text).
+    self.last_abort = None
 
   # --------------------------------------------------------------- from the page
   def event(self, text):
     with self.lock:
       self.event_id += 1
       self.events.append((self.event_id, round(time.time(), 1), text))
+      if text.startswith(("ABORT", "session ended")):
+        self.last_abort = self.events[-1]
 
   def start(self):
     if self.state != "off":
       return False, "already connected"
+    self.last_abort = None
     self.state, self.where, self.clip, self.queue = "starting", "lying", None, []
     self.thread = threading.Thread(target=self.run, daemon=True)
     self.thread.start()
@@ -542,6 +575,7 @@ class Session:
       temps=[None if np.isnan(x) else round(x) for x in self.temps],
       event_id=self.event_id,
       map_epoch=self.map_epoch,
+      last_abort=None if self.last_abort is None else dict(zip(("id", "t", "text"), self.last_abort, strict=True)),
     )  # fmt: skip
     return s
 
@@ -573,7 +607,7 @@ def catalog(policies):
   pols = {}
   for name, path in policies.items():
     try:
-      kind = policy_kind(path)
+      kind, source = policy_kind(path), policy_source(path)
     except Exception as e:  # noqa: BLE001 - a broken or half-copied file: skip it
       print(f"{name}: not read ({type(e).__name__}: {e})")
       continue
@@ -589,6 +623,7 @@ def catalog(policies):
         range=None if p.command_range is None else [
           [round(a * 1e3, 1), round(b * 1e3, 1)] for a, b in p.command_range[:2]
         ] + [[round(float(np.degrees(c)), 1) for c in p.command_range[2]]],
+        source=source,
       )  # fmt: skip
       continue
     if kind != "motion":
@@ -597,7 +632,7 @@ def catalog(policies):
     p = MotionPolicy(path)
     pols[name] = dict(
       kind=kind, inputs=int(p.mean.size), imu=p.imu,
-      covers=sorted(n for n in names if p.covers(n)),
+      covers=sorted(n for n in names if p.covers(n)), source=source,
     )  # fmt: skip
   return dict(
     moves={k: v for k, v in MOVES.items() if v in clips},
@@ -635,7 +670,10 @@ def handler(session, info):
       if path == "/api/config":  # the policies folder is read again at every page load
         fresh = find_policies()
         session.policies = fresh
-        return self.send(200, dict(info, policies=catalog(fresh)["policies"]))
+        return self.send(
+          200,
+          dict(info, policies=catalog(fresh)["policies"], disk_commit=repo_commit()),
+        )
       if path == "/api/state":
         return self.send(200, dict(session.status(), events=session.events_after(0)))
       if path == "/api/stream":
@@ -751,13 +789,25 @@ def main() -> int:
     gains=gains,
     rest_q=r(wlc.Clip("stand_up").q[0]),
     walk=list(WALK),
+    commit=repo_commit(),  # the code this server runs
   )
   session = Session(kind, gains, policies)
   if kind == "real":
     from leap_hand.hand import raise_on_signals
 
     raise_on_signals()
-  server = ThreadingHTTPServer((a.host, a.port), handler(session, info))
+  try:
+    server = ThreadingHTTPServer((a.host, a.port), handler(session, info))
+  except OSError as e:
+    if e.errno != errno.EADDRINUSE:
+      raise
+    print(
+      f"port {a.port} is taken: another panel still closing (wait a few seconds), or an"
+      f" ssh tunnel (-L {a.port}:...) started on this computer (a tunnel belongs on the"
+      f" laptop). `ss -ltnp | grep {a.port}` says which program has it.",
+      file=sys.stderr,
+    )
+    return 1
   server.daemon_threads = True
   print(
     f"Walking Leap panel ({kind}): http://localhost:{a.port}  (Ctrl-C: lies down, torque off)"

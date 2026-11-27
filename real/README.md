@@ -80,7 +80,22 @@ uv run python real/panel/server.py --twin    # a simulated hand, anywhere the re
 ```
 
 Then open http://localhost:8765 (from a laptop: `ssh -L 8765:localhost:8765 <hand PC>`
-first; it listens on that computer only). The page loads three.js from a CDN.
+first, **run on the laptop**; it listens on that computer only). The page loads three.js
+from a CDN. The same tunnel started on the hand's PC takes port 8765 from the panel ("port
+8765 is taken"; `ss -ltnp | grep 8765` says which program has it).
+
+To keep the panel running after the ssh session closes (closing it otherwise lies the
+hand down and turns the torque off), start it in tmux on the hand's PC:
+
+```sh
+tmux new -d -s panel -c ~/walking-leap/repo     # a session that outlives ssh
+tmux send-keys -t panel 'real/panel/run' Enter
+tmux attach -t panel                            # see it; Ctrl+b then d leaves it running
+```
+
+Ctrl+C in it stops the panel (lies down, then torque off; it takes a few seconds). After a
+`git pull`, restart it: the header shows the commit it runs and turns orange ("restart the
+panel") when the repo on disk has moved on.
 
 - **Connect** turns the torque on, lying; **Stand up**, then the moves and emotes, then
   **Lie down** or **Disconnect** (lies down if needed, then torque off).
@@ -101,15 +116,20 @@ first; it listens on that computer only). The page loads three.js from a CDN.
   front heaving up to 29 deg, no motor at its cap for more than 0.9 s.
 - **Policy:** the dropdown lists `outputs/real/policies/`. A green dot marks the moves and
   emotes it drives; the rest play as written. Shadow (computed and logged) or Live (its
-  targets go to the motors; on the real hand it asks first).
+  targets go to the motors; on the real hand it asks first). Picking one starts it in
+  Shadow; the dropdown always shows the policy the server holds (a refused pick goes
+  back), and under it the run and checkpoint it was exported from.
 - **Live view:** the hand as measured (encoders and the IMU's tilt) and, translucent, as
   the clip says it should be, each standing on the floor. Below it: tilt, the IMU against
   the plan, the policy against the clip, how late the loop runs, motor temperatures.
-- **Supposed position:** where the hand should be on the table, from the moves' planned
+- **Planned path:** where the hand should be on the table, from the moves' planned
   paths (no sensor measures it), restarting where it stood up; the gyro's heading in
   orange; with the twin, where the simulated hand really is (dashed).
 - **STOP** or **Esc:** lies down (if it can), then torque off. The power switch is still
   the emergency stop.
+- **When a guard stops the hand** (below, "It stops by itself"), a red banner under the
+  header says which one and what it means (e.g. "rf_mcp at its current limit for 1.5 s:
+  pushed too hard, or blocked"), until OK or the next Connect.
 
 **What a move does depends on the policy.** In the twin, open loop (no policy), W goes
 31 mm where 23 are planned, S 10 of 23, and the turns lean right; all six stay up on 45
@@ -157,12 +177,16 @@ inside them, at the same time) gets one, on screen (drag it) or a gamepad's left
 (the browser's Gamepad API; plug it in and press a button once). Up and down set the
 forward speed (to its fastest forward and back), left and right the turn rate; sideways
 stays 0. The command never leaves the range in the file. The keys become points of it
-(W full forward, Q full forward and full left turn, A turning on the spot...). Export the
-policy with its range, in m/s, m/s and rad/s (forward, left, turn; min, max):
+(W full forward, Q full forward and full left turn, A turning on the spot...). The export
+keeps the ranges the run trained on (its `params/env.yaml`, `commands.twist.ranges`), so
+a Velocity-v0 or later checkpoint gets the joystick by itself:
 
 ```sh
-uv run python real/export_policy.py <student run>/model_<it>.pt --command-range -0.02 0.03 0 0 -0.3 0.3
+uv run python real/export_policy.py <run>/model_<it>.pt    # -> outputs/real/policies/<task>_s<seed>_it<it>.npz
 ```
+
+It prints the range it kept. `--command-range FWD_MIN FWD_MAX LEFT_MIN LEFT_MAX TURN_MIN
+TURN_MAX` (m/s, m/s, rad/s) sets another one, `--keys-only` none.
 
 Its named commands (`command_names`, `command_values`, from the training's gait) stay as
 they are for the keys. The page repeats a held key every
@@ -175,10 +199,10 @@ STOP as always.
   "policy vs clip" is then its distance from the stance). **Live:** it walks.
 - Same loop as `real/wl play stand_up steer lie_down` (`Control.steer`): the guards stay
   except the one comparing the IMU with a clip's "down" (there is no clip).
-- The map's supposed position is the command's velocity, integrated (live only): a plan,
+- The map's planned path is the command's velocity, integrated (live only): a plan,
   not a measure.
-- No range in its file (like the first gait student, which has seen one command at a
-  time at fixed speeds): keys only, at those speeds.
+- No range in its file (the gait students, which have seen one command at a time at fixed
+  speeds; or a file exported before the export kept ranges): keys only, at those speeds.
 
 The moves were written with clip functions not in `main` yet (`crawl`,
 `backwards`, `turn`, and a sideways crawl:
@@ -229,8 +253,9 @@ uv run python real/export_policy.py outputs/hf/runs/$R/model_2999.pt \
   --motion src/walking_leap/assets/clips/crawl.npz --clip crawl --onnx outputs/hf/runs/$R/$R.onnx
 ```
 
-It writes `outputs/real/policies/$R.npz` (weights, normalizer, stance, action scale,
-limits and the reference it trained on). It checks the numpy copy against the ONNX and
+It writes `outputs/real/policies/Motion-Crawl-Flat-v0_s42_it2999.npz` (the run's task, seed
+and iteration; weights, normalizer, stance, action scale, limits, the reference it trained
+on and where it came from). It checks the numpy copy against the ONNX and
 refuses to keep it if they differ; it also says how far its reference is from the loop's
 clip. For the seed-42 runs, with and without IMU: equal to the ONNX within 1e-6, 1,404
 frames both, joints 0.033 rad apart (median; the replay's sag), "down" within 0.8°.
@@ -240,8 +265,9 @@ frames both, joints 0.033 rad apart (median; the replay's sag), "down" within 0.
 **3. Shadow, then live** (Mathias there, the rules above):
 
 ```sh
-real/wl play stand_up crawl lie_down --policy $R            # computed and logged, the clip is sent
-real/wl play stand_up crawl lie_down --policy $R --live     # the policy drives the crawl
+P=Motion-Crawl-Flat-v0_s42_it2999
+real/wl play stand_up crawl lie_down --policy $P            # computed and logged, the clip is sent
+real/wl play stand_up crawl lie_down --policy $P --live     # the policy drives the crawl
 ```
 
 `stand_up` and `lie_down` stay scripted; the policy runs only during the clip it was

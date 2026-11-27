@@ -2,6 +2,7 @@
 
   uv run python real/export_policy.py CHECKPOINT --motion CLIP_FILE --clip NAME --onnx RUN.onnx
   uv run python real/export_policy.py CHECKPOINT --tracker --clips NAME... --onnx RUN.onnx
+  uv run python real/export_policy.py CHECKPOINT          # a velocity policy (a gait student)
 
 CHECKPOINT  an RSL-RL ``model_<iteration>.pt`` of a Walking-Leap-Motion-* task.
 --motion    the clip file the task trained on (its ``--motion-file``, or the task's own in
@@ -11,15 +12,22 @@ CHECKPOINT  an RSL-RL ``model_<iteration>.pt`` of a Walking-Leap-Motion-* task.
             and follows whichever of ``--clips`` the loop plays (names in real/clips/ or
             docs/data/real_clips/, written from the clips it trained on).
 --onnx      the run's ONNX, to check the numpy copy against it (do it).
---out       default outputs/real/policies/<checkpoint's folder>.npz
+--out       default outputs/real/policies/<task>_s<seed>_it<iteration>.npz (``default_name``)
+
+A velocity policy keeps the command ranges its run trained on (the run's params/env.yaml,
+``commands.twist.ranges``): the panel then offers a joystick inside them. A run without
+them (a student, one command at a time) gets keys only. ``--command-range`` overrides the
+ranges, ``--keys-only`` drops them. Every file records where it came from (``source``).
 
 The hand's PC needs no torch: numpy only.
 """
 
 import argparse
+import json
 import os
 import re
 import sys
+import time
 from dataclasses import asdict
 
 import numpy as np
@@ -43,7 +51,58 @@ def gravity_in_palm(quat_wxyz: np.ndarray) -> np.ndarray:
   )
 
 
-def export_velocity(d: dict, out: str, command_range=None) -> int:
+def default_name(checkpoint: str) -> str:
+  """The exported file's name: the run's task without "Walking-Leap-", its seed and the
+  checkpoint's iteration, as scripts/eval_*.py name runs
+  (``.../2026-11-27_02-50-07_Walking-Leap-Motion-Gait-Flat-Velocity-v0_s42/model_1200.pt``
+  -> ``Motion-Gait-Flat-Velocity-v0_s42_it1200``). A run folder without a task keeps its
+  name."""
+  run = os.path.basename(os.path.dirname(os.path.abspath(checkpoint)))
+  task = re.search(r"Walking-Leap-(.+)$", run)
+  it = re.fullmatch(r"model_(\d+)\.pt", os.path.basename(checkpoint))
+  return (task.group(1) if task else run) + (f"_it{it.group(1)}" if it else "")
+
+
+def source_of(checkpoint: str) -> str:
+  """Where an exported file came from (JSON): the run folder, the checkpoint, the time."""
+  path = os.path.abspath(checkpoint)
+  return json.dumps(
+    dict(
+      run=os.path.basename(os.path.dirname(path)),
+      checkpoint=os.path.basename(path),
+      exported=time.strftime("%Y-%m-%d %H:%M"),
+    )
+  )
+
+
+def trained_command_range(run_dir: str) -> np.ndarray | None:
+  """(forward m/s, left m/s, turn rad/s) x (min, max): the velocity commands the run
+  trained on (its params/env.yaml, ``commands.twist.ranges``), or None when it had none
+  (the students see the clip's planned velocity, one command at a time) or the file is
+  missing. mjlab writes Python tags: tuples are read, the rest is skipped, nothing runs."""
+  import yaml
+
+  path = os.path.join(run_dir, "params", "env.yaml")
+  if not os.path.isfile(path):
+    return None
+
+  class Loader(yaml.SafeLoader):
+    pass
+
+  def python_tag(loader, suffix, node):
+    return loader.construct_sequence(node, deep=True) if suffix == "tuple" else None
+
+  Loader.add_multi_constructor("tag:yaml.org,2002:python/", python_tag)
+  with open(path) as f:
+    env = yaml.load(f, Loader=Loader)  # noqa: S506 - a SafeLoader
+  twist = (env.get("commands") or {}).get("twist") or {}
+  r = twist.get("ranges")
+  if not r:
+    return None
+  return np.array([r["lin_vel_x"], r["lin_vel_y"], r["ang_vel_z"]], float)
+
+
+def export_velocity(d: dict, out: str, command_range=None, source: str = "{}") -> int:
   """A velocity-command student (Walking-Leap-Motion-Gait-Flat-Student-v0): no clip, no
   reference; its history length and each keyboard command's velocity go in the file.
   Checked against the student as rsl-rl runs it (the checkpoint has no ONNX)."""
@@ -85,6 +144,7 @@ def export_velocity(d: dict, out: str, command_range=None) -> int:
       command_names=list(commands),
       command_values=np.array(list(commands.values())),
       **({} if command_range is None else {"command_range": command_range}),
+      source=source,
       **w,
     )
 
@@ -121,6 +181,15 @@ def export_velocity(d: dict, out: str, command_range=None) -> int:
     for k, v in commands.items()
   )
   print(f"{out}: {n} inputs ({STUDENT_HISTORY} steps), velocity commands: {speeds}")
+  if command_range is None:
+    print("  no command range: keys only on the panel")
+  else:
+    (f0, f1), (l0, l1), (t0, t1) = command_range
+    print(
+      f"  command range (the panel's joystick): forward {1e3 * f0:+.0f} to {1e3 * f1:+.0f}"
+      f" mm/s, left {1e3 * l0:+.0f} to {1e3 * l1:+.0f} mm/s, turn {np.degrees(t0):+.1f}"
+      f" to {np.degrees(t1):+.1f} deg/s"
+    )
   return 0
 
 
@@ -134,27 +203,36 @@ def main() -> int:
   ap.add_argument(
     "--command-range", type=float, nargs=6,
     metavar=("FWD_MIN", "FWD_MAX", "LEFT_MIN", "LEFT_MAX", "TURN_MIN", "TURN_MAX"),
-    help="velocity students trained on ranges (m/s, m/s, rad/s): the panel's joystick",
+    help="velocity policies: these ranges (m/s, m/s, rad/s) instead of the run's own",
+  )  # fmt: skip
+  ap.add_argument(
+    "--keys-only", action="store_true",
+    help="velocity policies: no command range (no joystick), even if the run had one",
   )  # fmt: skip
   ap.add_argument("--onnx")
   ap.add_argument("--out")
   a = ap.parse_args()
-  name = os.path.basename(os.path.dirname(os.path.abspath(a.checkpoint)))
-  out = a.out or f"{wlc.POLICIES}/{name}.npz"
+  out = a.out or f"{wlc.POLICIES}/{default_name(a.checkpoint)}.npz"
   os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
+  source = source_of(a.checkpoint)
+
+  def command_range():
+    if a.keys_only:
+      return None
+    if a.command_range is not None:
+      return np.reshape(a.command_range, (3, 2))
+    return trained_command_range(os.path.dirname(os.path.abspath(a.checkpoint)))
 
   saved = torch.load(a.checkpoint, map_location="cpu", weights_only=False)
   if "student_state_dict" in saved:
-    cr = None if a.command_range is None else np.reshape(a.command_range, (3, 2))
-    return export_velocity(saved["student_state_dict"], out, cr)
+    return export_velocity(saved["student_state_dict"], out, command_range(), source)
   from walking_leap.motion_cfg import STUDENT_HISTORY
 
   actor = saved.get("actor_state_dict", {})
   if actor.get("obs_normalizer._mean", torch.zeros(1, 0)).shape[-1] == STUDENT_HISTORY * 57:
     # PPO continued from a student (Walking-Leap-Motion-Gait-Flat-Velocity-v0): its actor
     # is the student's network, on the student's 285 inputs.
-    cr = None if a.command_range is None else np.reshape(a.command_range, (3, 2))
-    return export_velocity(actor, out, cr)
+    return export_velocity(actor, out, command_range(), source)
   if not (a.tracker and a.clips) and not (a.motion and a.clip):
     ap.error("a motion policy needs --motion and --clip (a tracker: --tracker --clips)")
   d = saved["actor_state_dict"]
@@ -196,6 +274,7 @@ def main() -> int:
       lo=[limits[n][0] for n in J],
       hi=[limits[n][1] for n in J],
       **(ref or dict(clips=a.clips)),
+      source=source,
       **w,
     )
 
