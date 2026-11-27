@@ -1,7 +1,7 @@
 # The right LEAP hand on its U2D2 adapter. Every number that reaches the motors is here.
 # Keys are the fields of leap_hand.config.LeapHandConfig; an unknown key is an error.
 # The loop (wlc.Hand) replaces the gains with its own (1200/0/600 by default) and checks
-# that the current limit is 350 mA.
+# that the current limit is its CURRENT_LIMIT_MA (450 mA since 2026-11-27; 350 before).
 name: leap_right
 
 hand:
@@ -14,7 +14,7 @@ hand:
   ki: 0
   kd: 200
   abduction_gain_scale: 0.75    # kp and kd on IDs 0, 4, 8, as in LeapNode
-  current_limit_ma: 350         # Goal Current (102); LEAP's own example uses 550: not here
+  current_limit_ma: 450         # Goal Current (102); 350 until 2026-11-27; LEAP's own example uses 550
   current_unit_ma: 1.0          # XC330-M288-T: 1 mA per unit
   return_delay_time: 0          # register 9 (EEPROM); factory 250 = 500 us per motor, 8 ms per
                                 # sync read over 16 motors (plain sync read 12 ms -> 2 ms at 0).

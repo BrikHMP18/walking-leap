@@ -88,13 +88,13 @@ def test_vendored_file_is_verbatim(rel_path):
 # ------------------------------------------------------------------- the rig and the port
 
 
-def test_the_rig_loads_with_350_ma_and_finds_its_port():
+def test_the_rig_loads_with_450_ma_and_finds_its_port():
   rig = load_rig()
   assert rig.name == "leap_right" and rig.path.endswith("leap_right.yaml")
   h = rig.hand
   assert h.port == "auto" and h.baudrate == 4_000_000 and h.motor_ids == conv.MOTOR_IDS
   assert (h.kp, h.ki, h.kd, h.abduction_gain_scale) == (600, 0, 200, 0.75)
-  assert h.current_limit_ma == 350 and h.limits_rad is None
+  assert h.current_limit_ma == 450 and h.limits_rad is None
   assert (h.watchdog_s, h.control_hz, h.return_delay_time) == (0.5, 100.0, 0)
   assert (
     wlc.RIG == str(REAL / "leap_hand" / "leap_right.yaml") or "WL_RIG" in os.environ
@@ -558,9 +558,9 @@ def test_the_loops_hand_drives_the_fake_in_the_repos_order():
   q0 = np.zeros(16)
   q0[wlc.JOINT_NAMES.index("if_mcp")] = 0.4
   with wlc.Hand((1200, 0, 600), fake=True, q0=q0) as hand:
-    assert hand.cfg.current_limit_ma == 350 and hand.h.gains == (1200, 0, 600)
+    assert hand.cfg.current_limit_ma == wlc.CURRENT_LIMIT_MA == 450 and hand.h.gains == (1200, 0, 600)
     assert (hand.h.sim_mode == MODE_CURRENT_BASED_POSITION).all()
-    assert (hand.h.sim_goal_current == 350).all()
+    assert (hand.h.sim_goal_current == 450).all()
     s, q, dq, cur, qc = hand.read()
     np.testing.assert_allclose(q, q0, atol=1e-6)  # the bus order is undone
     target = q0.copy()

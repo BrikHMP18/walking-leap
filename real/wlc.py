@@ -6,7 +6,7 @@ fingertips, y to the thumb side, z up), as in the simulation.
 
 The motors are driven through `Hand`, the only class here that talks to them. It uses the repo's
 LEAP driver, `leap_hand/` (its rig file `leap_hand/leap_right.yaml`): current-based position mode (5)
-with a 350 mA limit before torque, the joint limits, a 0.5 s watchdog, torque off on every way out.
+with a 450 mA limit before torque, the joint limits, a 0.5 s watchdog, torque off on every way out.
 """
 
 # ruff: noqa: B905
@@ -25,7 +25,17 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 sys.path.insert(0, HERE + "/imu")
-# The driver's settings for this hand (its limits, the 350 mA, the watchdog); the gains are set below.
+# The driver's settings for this hand (its limits, the 450 mA, the watchdog); the gains are set below.
+# The current limit (the rig's, checked at connect) and the guards: a run stops (hold, then torque
+# off) past MAX_TILT of tilt, or a motor over SAT_MA for SAT_S, or a clip's "down" MAX_OFF from the
+# sim's for OFF_S. Loosened on 2026-11-27 (350 mA, 40 deg, 330 mA for 1.5 s, 15 deg for 0.06 s) so a
+# policy has time to react to a push or a slip before the loop gives up.
+CURRENT_LIMIT_MA = 450
+SAT_MA = CURRENT_LIMIT_MA - 20
+SAT_S = 3.0
+MAX_TILT = 70.0
+MAX_OFF = 25.0
+OFF_S = 0.3
 RIG = os.environ.get("WL_RIG", HERE + "/leap_hand/leap_right.yaml")
 STOP = HERE + "/STOP"
 # Where clips are looked for, in order: the panel's moves and emotes, then the ones the real
@@ -79,7 +89,7 @@ def ease(u):
 
 # ---------------------------------------------------------------------------- the hand
 class Hand:
-  """The driver's LeapHand (or its fake) in the repo's joint order. 350 mA, its limits, its watchdog.
+  """The driver's LeapHand (or its fake) in the repo's joint order. 450 mA, its limits, its watchdog.
 
   What the loop uses: connect and disconnect (`with`), read() -> state (t, hw_error), q, dq, current in
   mA and the target sent, all in the repo's order; target(q); hold(); temps(); lo and hi; h.stats.
@@ -89,7 +99,7 @@ class Hand:
     from leap_hand.config import load_rig
 
     cfg = dataclasses.replace(load_rig(RIG).hand, kp=gains[0], ki=gains[1], kd=gains[2])
-    assert cfg.current_limit_ma == 350, "the current limit is 350 mA"
+    assert cfg.current_limit_ma == CURRENT_LIMIT_MA, f"the current limit is {CURRENT_LIMIT_MA} mA"
     self.cfg, self.gains, self.fake = cfg, gains, fake
     if fake:
       from leap_hand.fake import FakeLeapHand
@@ -293,7 +303,7 @@ class Steer:
 
 # ---------------------------------------------------------------------------- the loop
 class Control:
-  def __init__(self, hand, imu, rec, max_tilt=40.0, max_off=15.0, sat_s=1.5):
+  def __init__(self, hand, imu, rec, max_tilt=MAX_TILT, max_off=MAX_OFF, sat_s=SAT_S):
     self.hand, self.imu, self.rec = hand, imu, rec
     self.max_tilt, self.max_off, self.sat_s = max_tilt, max_off, sat_s
     self.q = None  # last target sent
@@ -326,9 +336,9 @@ class Control:
       off = float(np.degrees(np.arccos(np.clip(g @ pred, -1, 1))))
       self.worst_off = max(self.worst_off, off)
       self.off_for = self.off_for + 1 / HZ if off > self.max_off else 0.0
-      if self.off_for > 0.06:
+      if self.off_for > OFF_S:
         raise Abort(f"{off:.0f} deg away from the sim")
-    self.sat = np.where(np.abs(cur) > 330, self.sat + 1 / HZ, 0.0)
+    self.sat = np.where(np.abs(cur) > SAT_MA, self.sat + 1 / HZ, 0.0)
     if self.sat.max() > self.sat_s:
       raise Abort(
         f"{JOINT_NAMES[self.sat.argmax()]} at its current limit for {self.sat_s} s"
@@ -561,7 +571,7 @@ def run(
   policy=None,
   live=False,
   label="",
-  max_off=15.0,
+  max_off=MAX_OFF,
   rest=0.4,
   hooks=None,
   devices=None,
@@ -611,7 +621,7 @@ def run(
         live_policy=live,
         policy=getattr(policy, "name", None),
         joint_names=JOINT_NAMES,
-        current_limit_ma=350,
+        current_limit_ma=CURRENT_LIMIT_MA,
         columns=dict(motor=Recorder.MOTOR, imu=Recorder.IMU, cmd=Recorder.CMD),
       )
       rec = Recorder(hand, imu, name, meta)
